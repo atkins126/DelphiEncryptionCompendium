@@ -2,8 +2,8 @@
   The DEC team (see file NOTICE.txt) licenses this file
   to you under the Apache License, Version 2.0 (the
   "License"); you may not use this file except in compliance
-  with the License. A copy of this licence is found in the root directory of
-  this project in the file LICENCE.txt or alternatively at
+  with the License. A copy of this licence is found in the root directory
+  of this project in the file LICENCE.txt or alternatively at
 
     http://www.apache.org/licenses/LICENSE-2.0
 
@@ -22,10 +22,14 @@ unit DECUtil;
 
 interface
 
-{$I DECOptions.inc}
+{$INCLUDE DECOptions.inc}
 
 uses
-  SysUtils, Classes, DECBaseClass, DECTypes;
+  {$IFDEF FPC}
+  SysUtils, Classes;
+  {$ELSE}
+  System.SysUtils, System.Classes;
+  {$ENDIF}
 
 type
   // Exception Classes
@@ -90,20 +94,29 @@ type
     /// <summary>
     ///   Create the exception using a meaningfull error message
     /// </summary>
-    constructor Create(ClassType: TDECClass); overload;
+    constructor Create(ClassName: string); overload;
   end;
 
   /// <summary>
-  ///   Progress Callback used by Cipher and Hash for Stream and File methods
+  ///   Reason for calling the progress event
   /// </summary>
-  IDECProgress = interface
-    ['{64366E77-82FE-4B86-951E-79389729A493}']
-    /// <summary>
-    ///   Callback used by stream oriented Cipher and Hash functions for reporting
-    ///   the progress of the operation
-    /// </summary>
-    procedure Process(const Min, Max, Pos: Int64); stdcall;
-  end;
+  TDECProgressState = (Started, Processing, Finished {, Error});
+
+  /// <summary>
+  ///   Event type used by several hash- and cipher methods to display their
+  ///   progress. It can be implemented as regular method, procedure and as
+  ///   anonymous method, means: in place.
+  /// </summary>
+  /// <param name="Size">
+  ///   Number of bytes to process. For files this is usually the file size. For
+  ///   streams this can be less than the stream size if the stream is not being
+  ///   processed from the beginning.
+  /// </param>
+  /// <param name="Pos">
+  ///   Position within size in byte. For streams this may be a position
+  ///   relative to the starting position for processing.
+  /// </param>
+  TDECProgressEvent = reference to procedure(Size, Pos: Int64; State: TDECProgressState);
 
 // Byte Ordering
 
@@ -289,11 +302,11 @@ implementation
 
 {$IFDEF FMXTranslateableExceptions}
 uses
-  FMX.Types, DECUtilRawByteStringHelper;
+  FMX.Types,
 {$ELSE}
 uses
-  DECUtilRawByteStringHelper;
 {$ENDIF}
+  DECUtilRawByteStringHelper, DECTypes;
 
 const
 { TODO :
@@ -303,11 +316,6 @@ benutzt wird. Weil es keine Ressorcestrings bei FMX gibt? }
 
 resourcestring
   sAbstractError = cAbstractError;
-
-constructor EDECAbstractError.Create(ClassType: TDECClass);
-begin
-  inherited CreateResFmt(@sAbstractError, [ClassType.GetShortClassName]);
-end;
 
 const
   // Bit Lookup Table - see 'Bit Twiddling Hacks' by Sean Eron Anderson
@@ -598,7 +606,7 @@ begin
   end;
 end;
 
-procedure ProtectString(var Source: string); overload;
+procedure ProtectString(var Source: string);
 begin
   if Length(Source) > 0 then
   begin
@@ -608,7 +616,7 @@ begin
   end;
 end;
 
-procedure ProtectString(var Source: RawByteString); overload;
+procedure ProtectString(var Source: RawByteString);
 begin
   if Length(Source) > 0 then
   begin
@@ -645,11 +653,10 @@ end;
 function BytesToRawString(const Source: TBytes): RawByteString;
 begin
   SetLength(Result, Length(Source));
-
-  if (Length(Source) > 0) then
+  if Length(Source) > 0 then
   begin
     // determine lowest string index for handling of ZeroBasedStrings
-    Move(Source[0], Result[Low(result)], length(Source));
+    Move(Source[0], Result[Low(result)], Length(Source));
   end;
 end;
 
@@ -665,6 +672,16 @@ constructor EDECException.CreateFmt(const Msg: string;
                                     const Args: array of const);
 begin
   inherited Create(Format(Translate(Msg), Args));
+end;
+
+constructor EDECAbstractError.Create(ClassName: string);
+begin
+  inherited Create(Format(Translate(sAbstractError), [ClassName]));
+end;
+{$ELSE}
+constructor EDECAbstractError.Create(ClassName: string);
+begin
+  inherited CreateResFmt(@sAbstractError, [ClassName]);
 end;
 {$ENDIF}
 

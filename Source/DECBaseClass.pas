@@ -2,8 +2,8 @@
 The DEC team (see file NOTICE.txt) licenses this file
 to you under the Apache License, Version 2.0 (the
 "License"); you may not use this file except in compliance
-with the License. A copy of this licence is found in the root directory of this
-project in the file LICENCE.txt or alternatively at
+with the License. A copy of this licence is found in the root directory
+of this project in the file LICENCE.txt or alternatively at
 
   http://www.apache.org/licenses/LICENSE-2.0
 
@@ -19,10 +19,15 @@ unit DECBaseClass;
 
 interface
 
-{$I DECOptions.inc}
+{$INCLUDE DECOptions.inc}
 
 uses
-  System.SysUtils, Classes, Generics.Collections;
+  {$IFDEF FPC}
+  SysUtils, Classes,
+  {$ELSE}
+  System.SysUtils, System.Classes,
+  {$ENDIF}
+  Generics.Collections;
 
 type
   /// <summary>
@@ -137,8 +142,6 @@ type
     /// </summary>
     procedure FreeInstance; override;
     {$ENDIF X86ASM}
-
-    class function SelfTest: Boolean; virtual;
 
     /// <summary>
     ///   Registers this class type in the list of DEC classes (ClassList).
@@ -257,16 +260,6 @@ asm
       POP     EBX
 end;
 {$ENDIF X86ASM}
-
-class function TDECObject.SelfTest: Boolean;
-begin
-  {$IFDEF FPC}
-  Result := False; // suppress FPC compiler warning
-  {$ENDIF FPC}
-  // C++ does not support virtual static functions thus the base cannot be
-  // marked 'abstract'. This is our workaround:
-  raise EDECAbstractError.Create(Self);
-end;
 
 class procedure TDECObject.UnregisterClass(ClassList : TDECClassList);
 begin

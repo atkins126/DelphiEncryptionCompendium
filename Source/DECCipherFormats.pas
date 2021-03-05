@@ -2,8 +2,8 @@
   The DEC team (see file NOTICE.txt) licenses this file
   to you under the Apache License, Version 2.0 (the
   "License"); you may not use this file except in compliance
-  with the License. A copy of this licence is found in the root directory of
-  this project in the file LICENCE.txt or alternatively at
+  with the License. A copy of this licence is found in the root directory
+  of this project in the file LICENCE.txt or alternatively at
 
     http://www.apache.org/licenses/LICENSE-2.0
 
@@ -19,7 +19,11 @@ unit DECCipherFormats;
 interface
 
 uses
+  {$IFDEF FPC}
+  SysUtils, Classes,
+  {$ELSE}
   System.SysUtils, System.Classes,
+  {$ENDIF}
   DECCipherBase, DECCipherModes, DECUtil, DECFormatBase, DECCipherInterface;
 
 type
@@ -45,12 +49,12 @@ type
     ///   Callback which either encrypts or decrypts the stream, depending on
     ///   which one is being passed
     /// </param>
-    /// <param name="Progress">
+    /// <param name="OnProgress">
     ///   optional callback for reporting progress of the operation
     /// </param>
     procedure DoEncodeDecodeStream(const Source, Dest: TStream; DataSize: Int64;
                                    const CipherProc: TDECCipherCodeEvent;
-                                   const Progress: IDECProgress);
+                                   const OnProgress: TDECProgressEvent);
 
     /// <summary>
     ///   Encrypts or decrypts a file and stores the result in another file
@@ -67,19 +71,22 @@ type
     ///   declared in TDECCipherBase as virtual abstract method and
     ///   implemented in the individual cipher class inheriting from this one
     /// </param>
-    /// <param name="Progress">
+    /// <param name="OnProgress">
     ///   Optional event which can be passed to get information about the
     ///   progress of the encryption operation
     /// </param>
     procedure DoEncodeDecodeFile(const SourceFileName, DestFileName: string;
                                  const Proc: TDECCipherCodeEvent;
-                                 const Progress: IDECProgress);
+                                 const OnProgress: TDECProgressEvent);
   public
     /// <summary>
     ///   Encrypts the contents of a given byte array
     /// </summary>
     /// <param name="Source">
-    ///   Byte array with data to be encrypted
+    ///   Byte array with data to be encrypted. When block chaining mode ECBx
+    ///   is used (not recommended!), the size of the data passed via this
+    ///   parameter needs to be a multiple of the block size of the algorithm used,
+    ///   otherwise a EDECCipherException exception will be raised!
     /// </param>
     /// <returns>
     ///   Byte array with encrypted data
@@ -90,7 +97,10 @@ type
     ///   Decrypts the contents of a given byte array
     /// </summary>
     /// <param name="Source">
-    ///   Byte array with data to be decrypted
+    ///   Byte array with data to be decrypted. When block chaining mode ECBx
+    ///   is used (not recommended!), the size of the data passed via this
+    ///   parameter needs to be a multiple of the block size of the algorithm used,
+    ///   otherwise a EDECCipherException exception will be raised!
     /// </param>
     /// <returns>
     ///   Byte array with decrypted data
@@ -101,7 +111,10 @@ type
     ///   Encrypts the data contained in a given stream
     /// </summary>
     /// <param name="Source">
-    ///   Source stream containing the data to encrypt
+    ///   Source stream containing the data to encrypt. When block chaining mode ECBx
+    ///   is used (not recommended!), the size of the data passed via this
+    ///   parameter needs to be a multiple of the block size of the algorithm used,
+    ///   otherwise a EDECCipherException exception will be raised!
     /// </param>
     /// <param name="Dest">
     ///   Destination stream, where the encrypted data shall be put in
@@ -109,17 +122,20 @@ type
     /// <param name="DataSize">
     ///   Number of bytes of Source to be encrypted
     /// </param>
-    /// <param name="Progress">
+    /// <param name="OnProgress">
     ///   optional callback for reporting progress of the operation
     /// </param>
     procedure EncodeStream(const Source, Dest: TStream; DataSize: Int64;
-                           const Progress: IDECProgress = nil);
+                           const OnProgress: TDECProgressEvent = nil);
 
     /// <summary>
     ///   Decrypts the data contained in a given stream
     /// </summary>
     /// <param name="Source">
-    ///   Source stream containing the data to decrypt
+    ///   Source stream containing the data to decrypt. When block chaining mode ECBx
+    ///   is used (not recommended!), the size of the data passed via this
+    ///   parameter needs to be a multiple of the block size of the algorithm used,
+    ///   otherwise a EDECCipherException exception will be raised!
     /// </param>
     /// <param name="Dest">
     ///   Destination stream, where the decrypted data shall be put in
@@ -127,49 +143,58 @@ type
     /// <param name="DataSize">
     ///   Number of bytes of Source to be decrypted
     /// </param>
-    /// <param name="Progress">
+    /// <param name="OnProgress">
     ///   optional callback for reporting progress of the operation
     /// </param>
     procedure DecodeStream(const Source, Dest: TStream; DataSize: Int64;
-                           const Progress: IDECProgress = nil);
+                           const OnProgress: TDECProgressEvent = nil);
 
     /// <summary>
     ///   Reads the contents of one file, encrypts it and stores it in another file
     /// </summary>
     /// <param name="SourceFileName">
-    ///   Path and name of the file to encrypt
+    ///   Path and name of the file to encrypt. When block chaining mode ECBx
+    ///   is used (not recommended!), the size of the data passed via this
+    ///   parameter needs to be a multiple of the block size of the algorithm
+    ///   used, otherwise a EDECCipherException exception will be raised!
     /// </param>
     /// <param name="DestFileName">
     ///   Path and name of the file the encrypted data shall be stored in
     /// </param>
-    /// <param name="Progress">
+    /// <param name="OnProgress">
     ///   Optional event which can be passed to get information about the
     ///   progress of the encryption operation
     /// </param>
     procedure EncodeFile(const SourceFileName, DestFileName: string;
-                         const Progress: IDECProgress = nil);
+                         const OnProgress: TDECProgressEvent = nil);
 
     /// <summary>
     ///   Reads the contents of one file, decrypts it and stores it in another file
     /// </summary>
     /// <param name="SourceFileName">
-    ///   Path and name of the file to decrypt
+    ///   Path and name of the file to decrypt. When block chaining mode ECBx
+    ///   is used (not recommended!), the size of the data passed via this
+    ///   parameter needs to be a multiple of the block size of the algorithm
+    ///   used, otherwise a EDECCipherException exception will be raised!
     /// </param>
     /// <param name="DestFileName">
     ///   Path and name of the file the decrypted data shall be stored in
     /// </param>
-    /// <param name="Progress">
+    /// <param name="OnProgress">
     ///   Optional event which can be passed to get information about the
     ///   progress of the decryption operation
     /// </param>
     procedure DecodeFile(const SourceFileName, DestFileName: string;
-                         const Progress: IDECProgress = nil);
+                         const OnProgress: TDECProgressEvent = nil);
 
     /// <summary>
     ///   Encrypts the contents of the passed unicode string
     /// </summary>
     /// <param name="Source">
-    ///   String to encrypt
+    ///   String to encrypt. When block chaining mode ECBx
+    ///   is used (not recommended!), the size of the data passed via this
+    ///   parameter needs to be a multiple of the block size of the algorithm
+    ///   used, otherwise a EDECCipherException exception will be raised!
     /// </param>
     /// <param name="Format">
     ///   Optional parameter. One can pass a class reference of one of the
@@ -188,7 +213,10 @@ type
     ///   Encrypts the contents of the passed RawByteString
     /// </summary>
     /// <param name="Source">
-    ///   String to encrypt
+    ///   String to encrypt. When block chaining mode ECBx
+    ///   is used (not recommended!), the size of the data passed via this
+    ///   parameter needs to be a multiple of the block size of the algorithm
+    ///   used, otherwise a EDECCipherException exception will be raised!
     /// </param>
     /// <param name="Format">
     ///   Optional parameter. One can pass a class reference of one of the
@@ -207,7 +235,10 @@ type
     ///   Encrypts the contents of the passed unicode string
     /// </summary>
     /// <param name="Source">
-    ///   String to encrypt
+    ///   String to encrypt. When block chaining mode ECBx
+    ///   is used (not recommended!), the size of the data passed via this
+    ///   parameter needs to be a multiple of the block size of the algorithm
+    ///   used, otherwise a EDECCipherException exception will be raised!
     /// </param>
     /// <param name="Format">
     ///   Optional parameter. One can pass a class reference of one of the
@@ -233,7 +264,10 @@ type
     ///   Encrypts the contents of the passed unicode string
     /// </summary>
     /// <param name="Source">
-    ///   String to encrypt
+    ///   String to encrypt. When block chaining mode ECBx
+    ///   is used (not recommended!), the size of the data passed via this
+    ///   parameter needs to be a multiple of the block size of the algorithm
+    ///   used, otherwise a EDECCipherException exception will be raised!
     /// </param>
     /// <param name="Format">
     ///   Optional parameter. One can pass a class reference of one of the
@@ -259,7 +293,10 @@ type
     ///   Decrypts the contents of the passed encrypted unicode string
     /// </summary>
     /// <param name="Source">
-    ///   String to decrypt
+    ///   String to decrypt. When block chaining mode ECBx
+    ///   is used (not recommended!), the size of the data passed via this
+    ///   parameter needs to be a multiple of the block size of the algorithm
+    ///   used, otherwise a EDECCipherException exception will be raised!
     /// </param>
     /// <param name="Format">
     ///   Optional parameter. One can pass a class reference of one of the
@@ -278,7 +315,10 @@ type
     ///   Decrypts the contents of the passed encrypted RawByteString
     /// </summary>
     /// <param name="Source">
-    ///   String to decrypt
+    ///   String to decrypt. When block chaining mode ECBx
+    ///   is used (not recommended!), the size of the data passed via this
+    ///   parameter needs to be a multiple of the block size of the algorithm
+    ///   used, otherwise a EDECCipherException exception will be raised!
     /// </param>
     /// <param name="Format">
     ///   Optional parameter. One can pass a class reference of one of the
@@ -297,7 +337,10 @@ type
     ///   Decrypts the contents of the passed Unicode string
     /// </summary>
     /// <param name="Source">
-    ///   String to decrypt
+    ///   String to decrypt. When block chaining mode ECBx
+    ///   is used (not recommended!), the size of the data passed via this
+    ///   parameter needs to be a multiple of the block size of the algorithm
+    ///   used, otherwise a EDECCipherException exception will be raised!
     /// </param>
     /// <param name="Format">
     ///   Optional parameter. One can pass a class reference of one of the
@@ -321,7 +364,10 @@ type
     ///   Decrypts the contents of the passed RawByteString string
     /// </summary>
     /// <param name="Source">
-    ///   String to decrypt
+    ///   String to decrypt. When block chaining mode ECBx
+    ///   is used (not recommended!), the size of the data passed via this
+    ///   parameter needs to be a multiple of the block size of the algorithm
+    ///   used, otherwise a EDECCipherException exception will be raised!
     /// </param>
     /// <param name="Format">
     ///   Optional parameter. One can pass a class reference of one of the
@@ -346,7 +392,10 @@ type
     ///   Encrypts the contents of the passed Ansistring
     /// </summary>
     /// <param name="Source">
-    ///   String to encrypt
+    ///   String to encrypt. When block chaining mode ECBx
+    ///   is used (not recommended!), the size of the data passed via this
+    ///   parameter needs to be a multiple of the block size of the algorithm
+    ///   used, otherwise a EDECCipherException exception will be raised!
     /// </param>
     /// <param name="Format">
     ///   Optional parameter. One can pass a class reference of one of the
@@ -365,7 +414,10 @@ type
     ///   Encrypts the contents of the passed Ansistring
     /// </summary>
     /// <param name="Source">
-    ///   String to encrypt
+    ///   String to encrypt. When block chaining mode ECBx
+    ///   is used (not recommended!), the size of the data passed via this
+    ///   parameter needs to be a multiple of the block size of the algorithm
+    ///   used, otherwise a EDECCipherException exception will be raised!
     /// </param>
     /// <param name="Format">
     ///   Optional parameter. One can pass a class reference of one of the
@@ -391,7 +443,10 @@ type
     ///   Decrypts the contents of the passed encrypted Ansistring
     /// </summary>
     /// <param name="Source">
-    ///   String to decrypt
+    ///   String to decrypt. When block chaining mode ECBx
+    ///   is used (not recommended!), the size of the data passed via this
+    ///   parameter needs to be a multiple of the block size of the algorithm
+    ///   used, otherwise a EDECCipherException exception will be raised!
     /// </param>
     /// <param name="Format">
     ///   Optional parameter. One can pass a class reference of one of the
@@ -410,7 +465,10 @@ type
     ///   Decrypts the contents of the passed AnsiString string
     /// </summary>
     /// <param name="Source">
-    ///   String to decrypt
+    ///   String to decrypt. When block chaining mode ECBx
+    ///   is used (not recommended!), the size of the data passed via this
+    ///   parameter needs to be a multiple of the block size of the algorithm
+    ///   used, otherwise a EDECCipherException exception will be raised!
     /// </param>
     /// <param name="Format">
     ///   Optional parameter. One can pass a class reference of one of the
@@ -436,7 +494,10 @@ type
     ///   Encrypts the contents of the passed Widestring
     /// </summary>
     /// <param name="Source">
-    ///   String to encrypt
+    ///   String to encrypt. When block chaining mode ECBx
+    ///   is used (not recommended!), the size of the data passed via this
+    ///   parameter needs to be a multiple of the block size of the algorithm
+    ///   used, otherwise a EDECCipherException exception will be raised!
     /// </param>
     /// <param name="Format">
     ///   Optional parameter. One can pass a class reference of one of the
@@ -455,7 +516,10 @@ type
     ///   Encrypts the contents of the passed Widestring
     /// </summary>
     /// <param name="Source">
-    ///   String to encrypt
+    ///   String to encrypt. When block chaining mode ECBx
+    ///   is used (not recommended!), the size of the data passed via this
+    ///   parameter needs to be a multiple of the block size of the algorithm
+    ///   used, otherwise a EDECCipherException exception will be raised!
     /// </param>
     /// <param name="Format">
     ///   Optional parameter. One can pass a class reference of one of the
@@ -481,7 +545,10 @@ type
     ///   Decrypts the contents of the passed encrypted Widestring
     /// </summary>
     /// <param name="Source">
-    ///   String to decrypt
+    ///   String to decrypt. When block chaining mode ECBx
+    ///   is used (not recommended!), the size of the data passed via this
+    ///   parameter needs to be a multiple of the block size of the algorithm
+    ///   used, otherwise a EDECCipherException exception will be raised!
     /// </param>
     /// <param name="Format">
     ///   Optional parameter. One can pass a class reference of one of the
@@ -500,7 +567,10 @@ type
     ///   Decrypts the contents of the passed WideString string
     /// </summary>
     /// <param name="Source">
-    ///   String to decrypt
+    ///   String to decrypt. When block chaining mode ECBx
+    ///   is used (not recommended!), the size of the data passed via this
+    ///   parameter needs to be a multiple of the block size of the algorithm
+    ///   used, otherwise a EDECCipherException exception will be raised!
     /// </param>
     /// <param name="Format">
     ///   Optional parameter. One can pass a class reference of one of the
@@ -539,86 +609,90 @@ begin
   Result := Source;
   if Length(Result) > 0 then
     Decode(Result[0], Result[0], Length(Source));
-
-//  SetLength(Result, Length(Source));
-//  if Length(Result) > 0 then
-//    Decode(Source[0], Result[0], Length(Source));
 end;
 
-procedure TDECFormattedCipher.DoEncodeDecodeStream(const Source, Dest: TStream; DataSize: Int64;
-                                             const CipherProc: TDECCipherCodeEvent;
-                                             const Progress: IDECProgress);
+procedure TDECFormattedCipher.DoEncodeDecodeStream(const Source, Dest: TStream;
+                                                   DataSize: Int64;
+                                                   const CipherProc: TDECCipherCodeEvent;
+                                                   const OnProgress: TDECProgressEvent);
 var
   Buffer: TBytes;
   BufferSize, Bytes: Integer;
-  Min, Max, Pos: Int64;
+  Max, StartPos, Pos: Int64;
 begin
   Pos := Source.Position;
   if DataSize < 0 then
     DataSize := Source.Size - Pos;
-  Min := Pos;
-  Max := Pos + DataSize;
+
+  Max      := Pos + DataSize;
+  StartPos := Pos;
+
   if DataSize > 0 then
-  try
-    if StreamBufferSize <= 0 then
-      StreamBufferSize := 8192;
-    BufferSize := StreamBufferSize mod Context.BlockSize;
-    if BufferSize = 0 then
-      BufferSize := StreamBufferSize
-    else
-      BufferSize := StreamBufferSize + Context.BlockSize - BufferSize;
-    if DataSize > BufferSize then
-      SetLength(Buffer, BufferSize)
-    else
-      SetLength(Buffer, DataSize);
-    while DataSize > 0 do
-    begin
-      if Assigned(Progress) then
-        Progress.Process(Min, Max, Pos);
-      Bytes := BufferSize;
-      if Bytes > DataSize then
-        Bytes := DataSize;
-      Source.ReadBuffer(Buffer[0], Bytes);
-      // The real encryption or decryption routine
-      CipherProc(Buffer[0], Buffer[0], Bytes);
-      Dest.WriteBuffer(Buffer[0], Bytes);
-      Dec(DataSize, Bytes);
-      Inc(Pos, Bytes);
+    try
+      if Assigned(OnProgress) then
+        OnProgress(Max, 0, Started);
+
+      if StreamBufferSize <= 0 then
+        StreamBufferSize := 8192;
+      BufferSize := StreamBufferSize mod Context.BlockSize;
+      if BufferSize = 0 then
+        BufferSize := StreamBufferSize
+      else
+        BufferSize := StreamBufferSize + Context.BlockSize - BufferSize;
+      if DataSize > BufferSize then
+        SetLength(Buffer, BufferSize)
+      else
+        SetLength(Buffer, DataSize);
+      while DataSize > 0 do
+      begin
+        Bytes := BufferSize;
+        if Bytes > DataSize then
+          Bytes := DataSize;
+        Source.ReadBuffer(Buffer[0], Bytes);
+
+        // The real encryption or decryption routine
+        CipherProc(Buffer[0], Buffer[0], Bytes);
+        Dest.WriteBuffer(Buffer[0], Bytes);
+        Dec(DataSize, Bytes);
+        Inc(Pos, Bytes);
+
+        if Assigned(OnProgress) then
+          OnProgress(Max, Pos - StartPos, Processing);
+      end;
+    finally
+      ProtectBytes(Buffer);
+      if Assigned(OnProgress) then
+        OnProgress(Max, Max, Finished);
     end;
-  finally
-    ProtectBytes(Buffer);
-    if Assigned(Progress) then
-      Progress.Process(Min, Max, Max);
-  end;
 end;
 
 procedure TDECFormattedCipher.EncodeStream(const Source, Dest: TStream; DataSize: Int64;
-                                           const Progress: IDECProgress);
+                                           const OnProgress: TDECProgressEvent);
 begin
   DoEncodeDecodeStream(Source, Dest, DataSize,
-                       Encode, Progress);
+                       Encode, OnProgress);
 end;
 
 procedure TDECFormattedCipher.DecodeStream(const Source, Dest: TStream; DataSize: Int64;
-                                           const Progress: IDECProgress);
+                                           const OnProgress: TDECProgressEvent);
 begin
   DoEncodeDecodeStream(Source, Dest, DataSize,
-                       Decode, Progress);
+                       Decode, OnProgress);
 end;
 
 procedure TDECFormattedCipher.DoEncodeDecodeFile(const SourceFileName, DestFileName: string;
                                                  const Proc: TDECCipherCodeEvent;
-                                                 const Progress: IDECProgress);
+                                                 const OnProgress: TDECProgressEvent);
 var
   S, D: TStream;
 begin
-  assert(SourceFileName <> DestFileName, 'Source and Dest file name may not be equal');
+  Assert(SourceFileName <> DestFileName, 'Source and Dest file name may not be equal');
 
   S := TFileStream.Create(SourceFileName, fmOpenRead or fmShareDenyNone);
   try
     D := TFileStream.Create(DestFileName, fmCreate);
     try
-      DoEncodeDecodeStream(S, D, S.Size, Proc, Progress);
+      DoEncodeDecodeStream(S, D, S.Size, Proc, OnProgress);
     finally
       D.Free;
     end;
@@ -627,17 +701,20 @@ begin
   end;
 end;
 
-procedure TDECFormattedCipher.EncodeFile(const SourceFileName, DestFileName: string; const Progress: IDECProgress);
+procedure TDECFormattedCipher.EncodeFile(const SourceFileName, DestFileName: string;
+                                         const OnProgress: TDECProgressEvent);
 begin
-  DoEncodeDecodeFile(SourceFileName, DestFileName, Encode, Progress);
+  DoEncodeDecodeFile(SourceFileName, DestFileName, Encode, OnProgress);
 end;
 
-procedure TDECFormattedCipher.DecodeFile(const SourceFileName, DestFileName: string; const Progress: IDECProgress);
+procedure TDECFormattedCipher.DecodeFile(const SourceFileName, DestFileName: string;
+                                         const OnProgress: TDECProgressEvent);
 begin
-  DoEncodeDecodeFile(SourceFileName, DestFileName, Decode, Progress);
+  DoEncodeDecodeFile(SourceFileName, DestFileName, Decode, OnProgress);
 end;
 
-function TDECFormattedCipher.EncodeStringToBytes(const Source: string; Format: TDECFormatClass = nil): TBytes;
+function TDECFormattedCipher.EncodeStringToBytes(const Source: string;
+                                                 Format: TDECFormatClass = nil): TBytes;
 var
   Len: Integer;
 begin
@@ -653,7 +730,7 @@ begin
     SetLength(Result, 0);
 end;
 
-function TDECFormattedCipher.EncodeStringToBytes(const Source: RawByteString; Format: TDECFormatClass = nil): TBytes;
+function TDECFormattedCipher.EncodeStringToBytes(const Source: RawByteString; Format: TDECFormatClass): TBytes;
 var
   Len: Integer;
 begin
@@ -669,14 +746,14 @@ begin
     SetLength(Result, 0);
 end;
 
-function TDECFormattedCipher.DecodeStringToBytes(const Source: string; Format: TDECFormatClass = nil): TBytes;
+function TDECFormattedCipher.DecodeStringToBytes(const Source: string; Format: TDECFormatClass): TBytes;
 var
   Len: Integer;
   Src: TBytes;
 begin
   if Length(Source) > 0 then
   begin
-    Src := ValidFormat(Format).Decode(System.SysUtils.BytesOf(Source));
+    Src := ValidFormat(Format).Decode(BytesOf(Source));
 
     Len := Length(Src);
     Result := Src;
@@ -686,14 +763,14 @@ begin
     SetLength(Result, 0);
 end;
 
-function TDECFormattedCipher.DecodeStringToBytes(const Source: RawByteString; Format: TDECFormatClass = nil): TBytes;
+function TDECFormattedCipher.DecodeStringToBytes(const Source: RawByteString; Format: TDECFormatClass): TBytes;
 var
   Len: Integer;
   Src: TBytes;
 begin
   if Length(Source) > 0 then
   begin
-    Src := ValidFormat(Format).Decode(System.SysUtils.BytesOf(Source));
+    Src := ValidFormat(Format).Decode(BytesOf(Source));
 
     Len := Length(Src);
     Result := Src;
@@ -704,7 +781,7 @@ begin
 end;
 
 {$IFDEF ANSISTRINGSUPPORTED}
-function TDECFormattedCipher.EncodeStringToBytes(const Source: AnsiString; Format: TDECFormatClass = nil): TBytes;
+function TDECFormattedCipher.EncodeStringToBytes(const Source: AnsiString; Format: TDECFormatClass): TBytes;
 var
   Len: Integer;
 begin
@@ -722,14 +799,14 @@ end;
 {$ENDIF}
 
 {$IFDEF ANSISTRINGSUPPORTED}
-function TDECFormattedCipher.DecodeStringToBytes(const Source: AnsiString; Format: TDECFormatClass = nil): TBytes;
+function TDECFormattedCipher.DecodeStringToBytes(const Source: AnsiString; Format: TDECFormatClass): TBytes;
 var
   Len: Integer;
   Src: TBytes;
 begin
   if Length(Source) > 0 then
   begin
-    Src := ValidFormat(Format).Decode(System.SysUtils.BytesOf(Source));
+    Src := ValidFormat(Format).Decode(SysUtils.BytesOf(Source));
 
     Len := Length(Src);
     SetLength(Result, Len);
@@ -741,7 +818,7 @@ end;
 {$ENDIF}
 
 {$IFNDEF NEXTGEN}
-function TDECFormattedCipher.EncodeStringToBytes(const Source: WideString; Format: TDECFormatClass = nil): TBytes;
+function TDECFormattedCipher.EncodeStringToBytes(const Source: WideString; Format: TDECFormatClass): TBytes;
 var
   Len: Integer;
 begin
@@ -827,14 +904,14 @@ begin
 end;
 
 {$IFNDEF NEXTGEN}
-function TDECFormattedCipher.DecodeStringToBytes(const Source: WideString; Format: TDECFormatClass = nil): TBytes;
+function TDECFormattedCipher.DecodeStringToBytes(const Source: WideString; Format: TDECFormatClass): TBytes;
 var
   Len: Integer;
   Src: TBytes;
 begin
   if Length(Source) > 0 then
   begin
-    Src := ValidFormat(Format).Decode(System.SysUtils.BytesOf(Source));
+    Src := ValidFormat(Format).Decode(BytesOf(Source));
 
     Len := Length(Src);
     SetLength(Result, Len);
@@ -855,7 +932,7 @@ var
 begin
   if Length(Source) > 0 then
   begin
-    Src := ValidFormat(Format).Decode(System.SysUtils.BytesOf(Source));
+    Src := ValidFormat(Format).Decode(SysUtils.BytesOf(Source));
 
     Len := Length(Src);
     SetLength(Tmp, Len);
@@ -886,7 +963,7 @@ var
 begin
   if Length(Source) > 0 then
   begin
-    Src := ValidFormat(Format).Decode(System.SysUtils.BytesOf(Source));
+    Src := ValidFormat(Format).Decode(BytesOf(Source));
 
     Len := Length(Src);
     SetLength(Tmp, Len);
@@ -908,7 +985,7 @@ var
 begin
   if Length(Source) > 0 then
   begin
-    Src := ValidFormat(Format).Decode(System.SysUtils.BytesOf(Source));
+    Src := ValidFormat(Format).Decode(BytesOf(Source));
 
     Len := Length(Src);
     SetLength(Tmp, Len);

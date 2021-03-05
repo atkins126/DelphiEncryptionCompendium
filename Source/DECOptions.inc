@@ -2,8 +2,8 @@
   The DEC team (see file NOTICE.txt) licenses this file
   to you under the Apache License, Version 2.0 (the
   "License"); you may not use this file except in compliance
-  with the License. A copy of this licence is found in the root directory of
-  this project in the file LICENCE.txt or alternatively at
+  with the License. A copy of this licence is found in the root directory
+  of this project in the file LICENCE.txt or alternatively at
 
     http://www.apache.org/licenses/LICENSE-2.0
 
@@ -29,7 +29,6 @@
 {$UNDEF OLD_SHA_NAME}
 {$UNDEF OLD_WHIRLPOOL_NAMES}
 {$UNDEF AUTO_PRNG}
-{$UNDEF INCLUDE_IDEA}
 {$UNDEF DEC52_IDENTITY}
 {$UNDEF DEC3_CMCTS}
 
@@ -74,7 +73,7 @@
     {$DEFINE NO_ASM} (* default ON *)
   {$ELSE}
     {$IFDEF WINDOWS}
-      {$DEFINE NO_ASM} (* default ON *)
+      {.$DEFINE NO_ASM} (* default OFF *)
     {$ELSE
       {$DEFINE NO_ASM} (* default ON *)
     {$ENDIF}
@@ -135,7 +134,7 @@
 // Architecture (x86ASM, x64ASM, PurePascal)
 //------------------------------------------------------------------------------
 
-{$DEFINE NO_ASM}
+//{$DEFINE NO_ASM}
 
 {$IFDEF NO_ASM}
   // User config override (see top of this file)

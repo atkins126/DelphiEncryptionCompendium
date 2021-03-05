@@ -26,27 +26,16 @@ program Cipher_Console;
 
 uses
   System.SysUtils,
-  DECBaseClass in '..\..\Source\DECBaseClass.pas',
-  DECCipherBase in '..\..\Source\DECCipherBase.pas',
-  DECCipherModes in '..\..\Source\DECCipherModes.pas',
-  DECCiphers in '..\..\Source\DECCiphers.pas',
-  DECCRC in '..\..\Source\DECCRC.pas',
-  DECFormat in '..\..\Source\DECFormat.pas',
-  DECFormatBase in '..\..\Source\DECFormatBase.pas',
-  DECTypes in '..\..\Source\DECTypes.pas',
-  DECUtil in '..\..\Source\DECUtil.pas',
-  DECData in '..\..\Source\DECData.pas',
-  DECCipherFormats in '..\..\Source\DECCipherFormats.pas',
-  DECUtilRawByteStringHelper in '..\..\Source\DECUtilRawByteStringHelper.pas',
-  DECCipherInterface in '..\..\Source\DECCipherInterface.pas',
-  DECDataCipher in '..\..\Source\DECDataCipher.pas';
+  DECCipherBase,
+  DECCipherModes,
+  DECCipherFormats,
+  DECCiphers;
 
 var
   Cipher     : TCipher_1DES;
   // We use raw byte string here since Unicode handling of Windows console
   // is not given
   SourceText : RawByteString;
-  CipherText : string;
   // Key for the initialization of our encryption run
   CipherKey  : RawByteString;
   IV         : RawByteString;
@@ -81,7 +70,7 @@ begin
       Cipher.Init(CipherKey, IV, 0);
       Output := Cipher.DecodeBytes(Output);
 
-      SourceText := System.SysUtils.StringOf(Output);
+      SourceText := RawByteString(System.SysUtils.StringOf(Output));
 
       WriteLn('Decrypted data: ' + SourceText);
 
@@ -92,7 +81,7 @@ begin
       Cipher.Init(CipherKey, IV, 0);
       Output := Cipher.DecodeBytes(Output);
 
-      SourceText := System.SysUtils.StringOf(Output);
+      SourceText := RawByteString(System.SysUtils.StringOf(Output));
 
       WriteLn('Decrypted with different key: ' + SourceText);
 

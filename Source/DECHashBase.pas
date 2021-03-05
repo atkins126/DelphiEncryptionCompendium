@@ -2,8 +2,8 @@
   The DEC team (see file NOTICE.txt) licenses this file
   to you under the Apache License, Version 2.0 (the
   "License"); you may not use this file except in compliance
-  with the License. A copy of this licence is found in the root directory of
-  this project in the file LICENCE.txt or alternatively at
+  with the License. A copy of this licence is found in the root directory
+  of this project in the file LICENCE.txt or alternatively at
 
     http://www.apache.org/licenses/LICENSE-2.0
 
@@ -23,10 +23,14 @@ unit DECHashBase;
 
 interface
 
-{$I DECOptions.inc}
+{$INCLUDE DECOptions.inc}
 
 uses
-  SysUtils, Classes, Generics.Collections,
+  {$IFDEF FPC}
+  SysUtils, Classes,
+  {$ELSE}
+  System.SysUtils, System.Classes,
+  {$ENDIF}
   DECBaseClass, DECFormatBase, DECUtil, DECTypes, DECHashInterface;
 
 type
@@ -44,37 +48,14 @@ type
   /// <summary>
   ///   Base class for all hash algorithm implementation classes
   /// </summary>
+  {$IFDEF FPC}
+  TDECHash = class(TDECObject)  // does not find methods of the interface as it
+                                // searches for AnsiString instead of RawByteString
+                                // and thus does not find that
+  {$ELSE}
   TDECHash = class(TDECObject, IDECHash)
+  {$ENDIF}
   strict private
-    /// <summary>
-    ///   Key deviation algorithm to derrive keys from other keys.
-    ///   IEEE P1363 Working Group, ISO 18033-2:2004
-    ///   This is either KDF1 or KDF2 depending on KDFType
-    /// </summary>
-    /// <param name="Data">
-    ///   Source data from which the new key shall be derrived.
-    /// </param>
-    /// <param name="DataSize">
-    ///   Size in bytes of the source data passed.
-    /// </param>
-    /// <param name="Seed">
-    ///   Start value for pseudo random number generator
-    /// </param>
-    /// <param name="SeedSize">
-    ///   Size of the seed in byte.
-    /// </param>
-    /// <param name="MaskSize">
-    ///   Size of the generated output in byte
-    /// </param>
-    /// <param name="KDFType">
-    ///   Type of the algorithm: 1 = KDF1, 2 = KDF2 and 3 = KDF 3
-    /// </param>
-    /// <returns>
-    ///   Returns the new derrived key.
-    /// </returns>
-    class function KDFInternal(const Data; DataSize: Integer; const Seed;
-                               SeedSize, MaskSize: Integer; KDFType: TKDFType): TBytes; inline;
-
     /// <summary>
     ///   Raises an EDECHashException hash algorithm not initialized exception
     /// </summary>
@@ -94,11 +75,23 @@ type
     /// </param>
     procedure SetPaddingByte(Value: Byte);
   strict protected
-    FCount: array[0..7] of UInt32;
-    FBuffer: PByteArray;
-    FBufferSize: Integer;
-    FBufferIndex: Integer;
-    FPaddingByte: Byte;
+    FCount       : array[0..7] of UInt32;
+    /// <summary>
+    ///   Internal processing buffer
+    /// </summary>
+    FBuffer      : PByteArray;
+    /// <summary>
+    ///   Size of the internal processing buffer in byte
+    /// </summary>
+    FBufferSize  : Integer;
+    /// <summary>
+    ///   Position the algorithm is currently at in the processing buffer
+    /// </summary>
+    FBufferIndex : Integer;
+    /// <summary>
+    ///   Value used to fill up data
+    /// </summary>
+    FPaddingByte : Byte;
     /// <summary>
     ///   This abstract method has to be overridden by each concrete hash algorithm
     ///   to initialize the necessary data structures.
@@ -111,15 +104,41 @@ type
     ///   to finalize the calculation of a hash value over the data passed.
     /// </summary>
     procedure DoDone; virtual; abstract;
+    /// <summary>
+    ///   Adds the value of 8*Add to the value (which is interpreted as an
+    ///   8*32 bit unsigned integer array. The carry is taken care of.
+    /// </summary>
+    /// <param name="Value">
+    ///   Value which is incremented
+    /// </param>
+    /// <param name="Add">
+    ///   Value (which is being multiplied by 8) by which to increment Value
+    /// </param>
+    /// <remarks>
+    ///   Raises an EDECHashException overflow error if the last operation has
+    ///   set the carry flag
+    /// </remarks>
     procedure Increment8(var Value; Add: UInt32);
     /// <summary>
     ///   Raises an EDECHashException overflow error
     /// </summary>
     procedure RaiseHashOverflowError;
 
-{ TODO : Sollte ersetzt werden zusammen mit PByteArray, wird aber auch in DECRandom benutzt! }
+    /// <summary>
+    ///   Overwrite internally used processing buffers to make it harder to steal
+    ///   any data from memory.
+    /// </summary>
+    procedure SecureErase; virtual;
+
+    /// <summary>
+    ///   Returns the calculated hash value
+    /// </summary>
     function Digest: PByteArray; virtual; abstract;
   public
+    /// <summary>
+    ///   Initialize internal fields
+    /// </summary>
+    constructor Create; override;
     /// <summary>
     ///   Fees internal resources
     /// </summary>
@@ -132,7 +151,7 @@ type
     /// </summary>
     procedure Init;
     /// <summary>
-    ///   Calculates one chunk of data to be hashed.
+    ///   Processes one chunk of data to be hashed.
     /// </summary>
     /// <param name="Data">
     ///   Data on which the hash value shall be calculated on
@@ -232,16 +251,6 @@ type
     /// </returns>
     class function ClassByIdentity(Identity: Int64): TDECHashClass;
 
-    /// <summary>
-    ///   Detects whether the given hash class is one particularily suited
-    ///   for storing hashes of passwords
-    /// </summary>
-    /// <returns>
-    ///   true if it's a hash class specifically designed to store password
-    ///   hashes, false for ordinary hash algorithms.
-    /// </returns>
-    class function IsPasswordHash: Boolean;
-
     // hash calculation wrappers
 
     /// <summary>
@@ -302,9 +311,8 @@ type
     /// </summary>
     /// <param name="Stream">
     ///   Memory or file stream over which the hash value shall be calculated.
-    ///   The stream must be assigned and the hash value will either be calculated
-    ///   from the beginning of the stream (if size < 0) or from the current
-    ///   stream position (size > 0) to the end
+    ///   The stream must be assigned. The hash value will always be calculated
+    ///   from the current position of the stream.
     /// </param>
     /// <param name="Size">
     ///   Number of bytes within the stream over which to calculate the hash value
@@ -312,20 +320,19 @@ type
     /// <param name="HashResult">
     ///   In this byte array the calculated hash value will be returned
     /// </param>
-    /// <param name="Progress">
+    /// <param name="OnProgress">
     ///   Optional callback routine. It can be used to display the progress of
     ///   the operation.
     /// </param>
     procedure CalcStream(const Stream: TStream; Size: Int64; var HashResult: TBytes;
-                         const Progress: IDECProgress = nil); overload;
+                         const OnProgress:TDECProgressEvent = nil); overload;
     /// <summary>
     ///   Calculates the hash value over a givens stream of bytes
     /// </summary>
     /// <param name="Stream">
     ///   Memory or file stream over which the hash value shall be calculated.
-    ///   The stream must be assigned and the hash value will either be calculated
-    ///   from the beginning of the stream (if size < 0) or from the current
-    ///   stream position (size > 0) to the end
+    ///   The stream must be assigned. The hash value will always be calculated
+    ///   from the current position of the stream.
     /// </param>
     /// <param name="Size">
     ///   Number of bytes within the stream over which to calculate the hash value
@@ -334,7 +341,7 @@ type
     ///   Optional formatting class. The formatting of that will be applied to
     ///   the returned hash value.
     /// </param>
-    /// <param name="Progress">
+    /// <param name="OnProgress">
     ///   Optional callback routine. It can be used to display the progress of
     ///   the operation.
     /// </param>
@@ -343,7 +350,7 @@ type
     ///   passed as format parameter, if used.
     /// </returns>
     function CalcStream(const Stream: TStream; Size: Int64; Format: TDECFormatClass = nil;
-                        const Progress: IDECProgress = nil): RawByteString; overload;
+                        const OnProgress:TDECProgressEvent = nil): RawByteString; overload;
 
     /// <summary>
     ///   Calculates the hash value over the contents of a given file
@@ -354,12 +361,12 @@ type
     /// <param name="HashResult">
     ///   Here the resulting hash value is being returned as byte array
     /// </param>
-    /// <param name="Progress">
+    /// <param name="OnProgress">
     ///   Optional callback. If being used the hash calculation will call it from
     ///   time to time to return the current progress of the operation
     /// </param>
     procedure CalcFile(const FileName: string; var HashResult: TBytes;
-                       const Progress: IDECProgress = nil); overload;
+                       const OnProgress:TDECProgressEvent = nil); overload;
     /// <summary>
     ///   Calculates the hash value over the contents of a given file
     /// </summary>
@@ -370,7 +377,7 @@ type
     ///   Optional parameter: Formatting class. If being used the formatting is
     ///   being applied to the returned string with the calculated hash value
     /// </param>
-    /// <param name="Progress">
+    /// <param name="OnProgress">
     ///   Optional callback. If being used the hash calculation will call it from
     ///   time to time to return the current progress of the operation
     /// </param>
@@ -383,307 +390,7 @@ type
     ///   result in strange characters in the returned result.
     /// </remarks>
     function CalcFile(const FileName: string; Format: TDECFormatClass = nil;
-                      const Progress: IDECProgress = nil): RawByteString; overload;
-
-    // mask generation
-
-    /// <summary>
-    ///   Mask generation: generates an output based on the data given which is
-    ///   similar to a hash function but incontrast does not have a fixed output
-    ///   length. Use of a MGF is desirable in cases where a fixed-size hash
-    ///   would be inadequate. Examples include generating padding, producing
-    ///   one time pads or keystreams in symmetric key encryption, and yielding
-    ///   outputs for pseudorandom number generators
-    /// </summary>
-    /// <param name="Data">
-    ///   Data from which to generate a mask from
-    /// </param>
-    /// <param name="DataSize">
-    ///   Size of the input data in bytes
-    /// </param>
-    /// <param name="MaskSize">
-    ///   Size of the returned mask in bytes
-    /// </param>
-    /// <returns>
-    ///   Mask such that one cannot determine the data which had been given to
-    ///   generate this mask from.
-    /// </returns>
-    class function MGF1(const Data; DataSize, MaskSize: Integer): TBytes; overload;
-    /// <summary>
-    ///   Mask generation: generates an output based on the data given which is
-    ///   similar to a hash function but incontrast does not have a fixed output
-    ///   length. Use of a MGF is desirable in cases where a fixed-size hash
-    ///   would be inadequate. Examples include generating padding, producing
-    ///   one time pads or keystreams in symmetric key encryption, and yielding
-    ///   outputs for pseudorandom number generators
-    /// </summary>
-    /// <param name="Data">
-    ///   Data from which to generate a mask from
-    /// </param>
-    /// <param name="MaskSize">
-    ///   Size of the returned mask in bytes
-    /// </param>
-    /// <returns>
-    ///   Mask such that one cannot determine the data which had been given to
-    ///   generate this mask from.
-    /// </returns>
-    class function MGF1(const Data: TBytes; MaskSize: Integer): TBytes; overload;
-
-    /// <summary>
-    ///   Key deviation algorithm to derrive keys from other keys.
-    ///   IEEE P1363 Working Group, ISO 18033-2:2004
-    /// </summary>
-    /// <param name="Data">
-    ///   Source data from which the new key shall be derrived.
-    /// </param>
-    /// <param name="DataSize">
-    ///   Size in bytes of the source data passed.
-    /// </param>
-    /// <param name="Seed">
-    ///   Salt value
-    /// </param>
-    /// <param name="SeedSize">
-    ///   Size of the seed/salt in byte.
-    /// </param>
-    /// <param name="MaskSize">
-    ///   Size of the generated output in byte
-    /// </param>
-    /// <returns>
-    ///   Returns the new derrived key with the length specified in MaskSize.
-    /// </returns>
-    /// <remarks>
-    ///   In earlier versions there was an optional format parameter. This has
-    ///   been removed as this is a base class. The method might not have
-    ///   returned a result with the MaskSize specified, as the formatting might
-    ///   have had to alter this. This would have been illogical.
-    /// </remarks>
-    class function KDF1(const Data; DataSize: Integer; const Seed;
-                        SeedSize, MaskSize: Integer): TBytes; overload;
-
-    /// <summary>
-    ///   Key deviation algorithm to derrive keys from other keys.
-    ///   IEEE P1363 Working Group, ISO 18033-2:2004
-    /// </summary>
-    /// <param name="Data">
-    ///   Source data from which the new key shall be derrived.
-    /// </param>
-    /// <param name="Seed">
-    ///   Salt value
-    /// </param>
-    /// <param name="MaskSize">
-    ///   Size of the generated output in byte
-    /// </param>
-    /// <returns>
-    ///   Returns the new derrived key with the length specified in MaskSize.
-    /// </returns>
-    class function KDF1(const Data, Seed: TBytes; MaskSize: Integer): TBytes; overload;
-
-    /// <summary>
-    ///   Key deviation algorithm to derrive keys from other keys.
-    ///   IEEE P1363 Working Group, ISO 18033-2:2004
-    /// </summary>
-    /// <param name="Data">
-    ///   Source data from which the new key shall be derrived.
-    /// </param>
-    /// <param name="DataSize">
-    ///   Size in bytes of the source data passed.
-    /// </param>
-    /// <param name="Seed">
-    ///   Salt value
-    /// </param>
-    /// <param name="SeedSize">
-    ///   Size of the seed/salt in byte.
-    /// </param>
-    /// <param name="MaskSize">
-    ///   Size of the generated output in byte
-    /// </param>
-    /// <returns>
-    ///   Returns the new derrived key with the length specified in MaskSize.
-    /// </returns>
-    /// <remarks>
-    ///   In earlier versions there was an optional format parameter. This has
-    ///   been removed as this is a base class. The method might not have
-    ///   returned a result with the MaskSize specified, as the formatting might
-    ///   have had to alter this. This would have been illogical.
-    /// </remarks>
-    class function KDF2(const Data; DataSize: Integer; const Seed;
-                        SeedSize, MaskSize: Integer): TBytes; overload;
-
-    /// <summary>
-    ///   Key deviation algorithm to derrive keys from other keys.
-    ///   IEEE P1363 Working Group, ISO 18033-2:2004
-    /// </summary>
-    /// <param name="Data">
-    ///   Source data from which the new key shall be derrived.
-    /// </param>
-    /// <param name="Seed">
-    ///   Start value for pseudo random number generator
-    /// </param>
-    /// <param name="MaskSize">
-    ///   Size of the generated output in byte
-    /// </param>
-    /// <returns>
-    ///   Returns the new derrived key with the length specified in MaskSize.
-    /// </returns>
-    class function KDF2(const Data, Seed: TBytes; MaskSize: Integer): TBytes; overload;
-
-    /// <summary>
-    ///   Key deviation algorithm to derrive keys from other keys.
-    /// </summary>
-    /// <param name="Data">
-    ///   Source data from which the new key shall be derrived.
-    /// </param>
-    /// <param name="DataSize">
-    ///   Size in bytes of the source data passed.
-    /// </param>
-    /// <param name="Seed">
-    ///   Salt value
-    /// </param>
-    /// <param name="SeedSize">
-    ///   Size of the seed/salt in byte.
-    /// </param>
-    /// <param name="MaskSize">
-    ///   Size of the generated output in byte
-    /// </param>
-    /// <returns>
-    ///   Returns the new derrived key with the length specified in MaskSize.
-    /// </returns>
-    /// <remarks>
-    ///   In earlier versions there was an optional format parameter. This has
-    ///   been removed as this is a base class. The method might not have
-    ///   returned a result with the MaskSize specified, as the formatting might
-    ///   have had to alter this. This would have been illogical.
-    /// </remarks>
-    class function KDF3(const Data; DataSize: Integer; const Seed;
-                        SeedSize, MaskSize: Integer): TBytes; overload;
-
-    /// <summary>
-    ///   Key deviation algorithm to derrive keys from other keys.
-    /// </summary>
-    /// <param name="Data">
-    ///   Source data from which the new key shall be derrived.
-    /// </param>
-    /// <param name="Seed">
-    ///   Salt value
-    /// </param>
-    /// <param name="MaskSize">
-    ///   Size of the generated output in byte
-    /// </param>
-    /// <returns>
-    ///   Returns the new derrived key with the length specified in MaskSize.
-    /// </returns>
-    class function KDF3(const Data, Seed: TBytes; MaskSize: Integer): TBytes; overload;
-
-    // DEC's own KDF + MGF
-
-    /// <summary>
-    ///   Key deviation algorithm to derrive keys from other keys. The alrorithm
-    ///   implemented by this method does not follow any official standard.
-    /// </summary>
-    /// <param name="Data">
-    ///   Source data from which the new key shall be derrived.
-    /// </param>
-    /// <param name="DataSize">
-    ///   Size in bytes of the source data passed.
-    /// </param>
-    /// <param name="Seed">
-    ///   Salt value
-    /// </param>
-    /// <param name="SeedSize">
-    ///   Size of the seed/salt in byte.
-    /// </param>
-    /// <param name="MaskSize">
-    ///   Size of the generated output in byte
-    /// </param>
-    /// <param name="Index">
-    ///   Optional parameter: can be used to specify a different default value
-    ///   for the index variable used in the algorithm.
-    /// </param>
-    /// <returns>
-    ///   Returns the new derrived key with the length specified in MaskSize.
-    /// </returns>
-    class function KDFx(const Data; DataSize: Integer; const Seed; SeedSize, MaskSize: Integer; Index: UInt32 = 1): TBytes; overload;
-    /// <summary>
-    ///   Key deviation algorithm to derrive keys from other keys.
-    /// </summary>
-    /// <remarks>
-    ///   This variant of the algorithm does not follow an official standard.
-    ///   It has been created by the original author of DEC.
-    /// </remarks>
-    /// <param name="Data">
-    ///   Source data from which the new key shall be derrived.
-    /// </param>
-    /// <param name="Seed">
-    ///   Salt value
-    /// </param>
-    /// <param name="MaskSize">
-    ///   Size of the generated output in byte
-    /// </param>
-    /// <param name="Index">
-    ///   Optional parameter: can be used to specify a different default value
-    ///   for the index variable used in the algorithm.
-    /// </param>
-    /// <returns>
-    ///   Returns the new derrived key with the length specified in MaskSize.
-    /// </returns>
-    class function KDFx(const Data, Seed: TBytes; MaskSize: Integer; Index: UInt32 = 1): TBytes; overload;
-
-    /// <summary>
-    ///   Mask generation: generates an output based on the data given which is
-    ///   similar to a hash function but incontrast does not have a fixed output
-    ///   length. Use of a MGF is desirable in cases where a fixed-size hash
-    ///   would be inadequate. Examples include generating padding, producing
-    ///   one time pads or keystreams in symmetric key encryption, and yielding
-    ///   outputs for pseudorandom number generators.
-    /// </summary>
-    /// <remarks>
-    ///   This variant of the algorithm does not follow an official standard.
-    ///   It has been created by the original author of DEC.
-    /// </remarks>
-    /// <param name="Data">
-    ///   Data from which to generate a mask from
-    /// </param>
-    /// <param name="DataSize">
-    ///   Size of the passed data in bytes
-    /// </param>
-    /// <param name="MaskSize">
-    ///   Size of the returned mask in bytes
-    /// </param>
-    /// <param name="Index">
-    ///   Looks like this is a salt applied to each byte of output data?
-{ TODO : Clarify this parameter }
-    /// </param>
-    /// <returns>
-    ///   Mask such that one cannot determine the data which had been given to
-    ///   generate this mask from.
-    /// </returns>
-    class function MGFx(const Data; DataSize, MaskSize: Integer; Index: UInt32 = 1): TBytes; overload;
-    /// <summary>
-    ///   Mask generation: generates an output based on the data given which is
-    ///   similar to a hash function but incontrast does not have a fixed output
-    ///   length. Use of a MGF is desirable in cases where a fixed-size hash
-    ///   would be inadequate. Examples include generating padding, producing
-    ///   one time pads or keystreams in symmetric key encryption, and yielding
-    ///   outputs for pseudorandom number generators.
-    /// </summary>
-    /// <remarks>
-    ///   This variant of the algorithm does not follow an official standard.
-    ///   It has been created by the original author of DEC.
-    /// </remarks>
-    /// <param name="Data">
-    ///   Data from which to generate a mask from
-    /// </param>
-    /// <param name="MaskSize">
-    ///   Size of the returned mask in bytes
-    /// </param>
-    /// <param name="Index">
-    ///
-    /// </param>
-    /// <returns>
-    ///   Mask such that one cannot determine the data which had been given to
-    ///   generate this mask from.
-    /// </returns>
-    class function MGFx(const Data: TBytes; MaskSize: Integer; Index: UInt32 = 1): TBytes; overload;
+                      const OnProgress:TDECProgressEvent = nil): RawByteString; overload;
 
     /// <summary>
     ///   Defines the byte used in the KDF methods to padd the end of the data
@@ -692,19 +399,6 @@ type
     /// </summary>
     property PaddingByte: Byte read GetPaddingByte write SetPaddingByte;
   end;
-
-  /// <summary>
-  ///   All hash classes with hash algorithms specially developed for password
-  ///   hashing should inherit from this class in order to be able to distinguish
-  ///   those from normal hash algorithms not really meant to be used for password
-  ///   hashing.
-  /// </summary>
-  TDECPasswordHash = class(TDECHash);
-
-  /// <summary>
-  ///   Type needed to be able to remove with statements in KDF functions
-  /// </summary>
-  TDECHashstype = class of TDECHash;
 
 /// <summary>
 ///   Returns the passed hash class type if it is not nil. Otherwise the
@@ -746,39 +440,58 @@ var
 
 function ValidHash(HashClass: TDECHashClass): TDECHashClass;
 begin
-  if HashClass <> nil then
+  if Assigned(HashClass) then
     Result := HashClass
   else
     Result := FDefaultHashClass;
 
-  if Result = nil then
+  if not Assigned(Result) then
     raise EDECHashException.CreateRes(@sHashNoDefault);
 end;
 
 procedure SetDefaultHashClass(HashClass: TDECHashClass);
 begin
-  assert(assigned(HashClass), 'Do not set a nil default hash class!');
+  Assert(Assigned(HashClass), 'Do not set a nil default hash class!');
 
   FDefaultHashClass := HashClass;
 end;
 
 { TDECHash }
 
+constructor TDECHash.Create;
+begin
+  inherited;
+  FBufferSize := 0;
+  FBuffer     := nil;
+end;
+
 destructor TDECHash.Destroy;
 begin
-  ProtectBuffer(Digest^, DigestSize);
-  ProtectBuffer(FBuffer^, FBufferSize);
+  SecureErase;
   FreeMem(FBuffer, FBufferSize);
 
   inherited Destroy;
 end;
 
+procedure TDECHash.SecureErase;
+begin
+  ProtectBuffer(Digest^, DigestSize);
+  if FBuffer = nil then
+    ProtectBuffer(FBuffer^, FBufferSize);
+end;
+
 procedure TDECHash.Init;
 begin
   FBufferIndex := 0;
-  FBufferSize := BlockSize;
-  // ReallocMemory instead of ReallocMem due to C++ compatibility as per 10.1 help
-  FBuffer := ReallocMemory(FBuffer, FBufferSize);
+
+  if (FBuffer = nil) or (UInt32(FBufferSize) <> BlockSize) then
+    begin
+      FBufferSize := BlockSize;
+      // ReallocMemory instead of ReallocMem due to C++ compatibility as per 10.1 help
+      // It is necessary to reallocate the buffer as FreeMem in destructor wouldn't
+      // accept a nil pointer on some platforms.
+      FBuffer := ReallocMemory(FBuffer, FBufferSize);
+    end;
 
   FillChar(FBuffer^, FBufferSize, 0);
   FillChar(FCount, SizeOf(FCount), 0);
@@ -788,37 +501,11 @@ end;
 procedure TDECHash.Done;
 begin
   DoDone;
-  ProtectBuffer(FBuffer^, FBufferSize);
-
-  FBufferSize := 0;
-  // ReallocMemory instead of ReallocMem due to C++ compatibility as per 10.1 help
-  // It is necessary to reallocate the buffer as FreeMem in destructor wouldn't
-  // accept a nil pointer on some platforms.
-  FBuffer := ReallocMemory(FBuffer, 0);
 end;
 
 function TDECHash.GetPaddingByte: Byte;
 begin
-  result := FPaddingByte;
-end;
-
-class function TDECHash.IsPasswordHash: Boolean;
-var
-  Parent : TClass;
-begin
-  result := false;
-
-  Parent := ClassParent;
-  while assigned(Parent) do
-  begin
-    if (ClassParent = TDECPasswordHash) then
-    begin
-      result := true;
-      break;
-    end
-    else
-      Parent := Parent.ClassParent;
-  end;
+  Result := FPaddingByte;
 end;
 
 procedure TDECHash.Increment8(var Value; Add: UInt32);
@@ -937,7 +624,7 @@ begin
   if DataSize <= 0 then
     Exit;
 
-  if FBuffer = nil then
+  if not Assigned(FBuffer) then
     RaiseHashNotInitialized;
 
   Increment8(FCount, DataSize);
@@ -990,14 +677,14 @@ class function TDECHash.DigestSize: UInt32;
 begin
   // C++ does not support virtual static functions thus the base cannot be
   // marked 'abstract'. This is our workaround:
-  raise EDECAbstractError.Create(Self);
+  raise EDECAbstractError.Create(GetShortClassName);
 end;
 
 class function TDECHash.BlockSize: UInt32;
 begin
   // C++ does not support virtual static functions thus the base cannot be
   // marked 'abstract'. This is our workaround:
-  raise EDECAbstractError.Create(Self);
+  raise EDECAbstractError.Create(GetShortClassName);
 end;
 
 function TDECHash.CalcBuffer(const Buffer; BufferSize: Integer): TBytes;
@@ -1025,14 +712,14 @@ begin
   Result := '';
   if Length(Value) > 0 then
   begin
-    Size := Length(Value) * SizeOf(Value[low(Value)]);
-    Data := CalcBuffer(Value[low(Value)], Size);
-    result := System.SysUtils.StringOf(ValidFormat(Format).Encode(Data));
+    Size   := Length(Value) * SizeOf(Value[low(Value)]);
+    Data   := CalcBuffer(Value[low(Value)], Size);
+    Result := StringOf(ValidFormat(Format).Encode(Data));
   end
   else
   begin
     SetLength(Data, 0);
-    result := System.SysUtils.StringOf(ValidFormat(Format).Encode(CalcBuffer(Data, 0)));
+    result := StringOf(ValidFormat(Format).Encode(CalcBuffer(Data, 0)));
   end;
 end;
 
@@ -1049,46 +736,46 @@ begin
   else
   begin
     SetLength(Buf, 0);
-    result := BytesToRawString(ValidFormat(Format).Encode(CalcBuffer(Buf, 0)));
+    Result := BytesToRawString(ValidFormat(Format).Encode(CalcBuffer(Buf, 0)));
   end;
 end;
 
 class function TDECHash.ClassByIdentity(Identity: Int64): TDECHashClass;
 begin
-  result := TDECHashClass(ClassList.ClassByIdentity(Identity));
+  Result := TDECHashClass(ClassList.ClassByIdentity(Identity));
 end;
 
 class function TDECHash.ClassByName(const Name: string): TDECHashClass;
 begin
-  result := TDECHashClass(ClassList.ClassByName(Name));
+  Result := TDECHashClass(ClassList.ClassByName(Name));
 end;
 
 procedure TDECHash.CalcStream(const Stream: TStream; Size: Int64;
-  var HashResult: TBytes; const Progress: IDECProgress = nil);
+  var HashResult: TBytes; const OnProgress:TDECProgressEvent);
 var
   Buffer: TBytes;
   Bytes: Integer;
-  Min, Max, Pos: Int64;
+  Max, Pos: Int64;
 begin
-  assert(assigned(Stream), 'Stream to calculate hash on is not assigned');
+  Assert(Assigned(Stream), 'Stream to calculate hash on is not assigned');
 
-  SetLength(HashResult, 0);
-  Min := 0;
   Max := 0;
+  SetLength(HashResult, 0);
   try
     Init;
 
     if StreamBufferSize <= 0 then
       StreamBufferSize := 8192;
 
+    Pos := Stream.Position;
+
     if Size < 0 then
-    begin
-      Stream.Position := 0;
-      Size := Stream.Size;
-      Pos := 0;
-    end
-    else
-      Pos := Stream.Position;
+      Size := Stream.Size - Pos;
+
+    Max      := Pos + Size;
+
+    if Assigned(OnProgress) then
+      OnProgress(Max, 0, Started);
 
     Bytes := StreamBufferSize mod FBufferSize;
 
@@ -1102,13 +789,8 @@ begin
     else
       SetLength(Buffer, Bytes);
 
-    Min := Pos;
-    Max := Pos + Size;
-
     while Size > 0 do
     begin
-      if Assigned(Progress) then
-        Progress.Process(Min, Max, Pos);
       Bytes := Length(Buffer);
       if Bytes > Size then
         Bytes := Size;
@@ -1116,228 +798,50 @@ begin
       Calc(Buffer[0], Bytes);
       Dec(Size, Bytes);
       Inc(Pos, Bytes);
+
+      if Assigned(OnProgress) then
+        OnProgress(Max, Pos, Processing);
     end;
 
     Done;
     HashResult := DigestAsBytes;
   finally
     ProtectBytes(Buffer);
-    if Assigned(Progress) then
-      Progress.Process(Min, Max, Max);
+    if Assigned(OnProgress) then
+      OnProgress(Max, Max, Finished);
   end;
 end;
 
 function TDECHash.CalcStream(const Stream: TStream; Size: Int64;
-  Format: TDECFormatClass = nil; const Progress: IDECProgress = nil): RawByteString;
+  Format: TDECFormatClass; const OnProgress:TDECProgressEvent): RawByteString;
 var
   Hash: TBytes;
 begin
-  CalcStream(Stream, Size, Hash, Progress);
+  CalcStream(Stream, Size, Hash, OnProgress);
   Result := BytesToRawString(ValidFormat(Format).Encode(Hash));
 end;
 
 procedure TDECHash.CalcFile(const FileName: string; var HashResult: TBytes;
-  const Progress: IDECProgress = nil);
+                            const OnProgress:TDECProgressEvent);
 var
   S: TFileStream;
 begin
   SetLength(HashResult, 0);
   S := TFileStream.Create(FileName, fmOpenRead or fmShareDenyNone);
   try
-    CalcStream(S, S.Size, HashResult, Progress);
+    CalcStream(S, S.Size, HashResult, OnProgress);
   finally
     S.Free;
   end;
 end;
 
-function TDECHash.CalcFile(const FileName: string; Format: TDECFormatClass = nil;
-  const Progress: IDECProgress = nil): RawByteString;
+function TDECHash.CalcFile(const FileName: string; Format: TDECFormatClass;
+                           const OnProgress:TDECProgressEvent): RawByteString;
 var
   Hash: TBytes;
 begin
-  CalcFile(FileName, Hash, Progress);
+  CalcFile(FileName, Hash, OnProgress);
   Result := BytesToRawString(ValidFormat(Format).Encode(Hash));
-end;
-
-class function TDECHash.MGF1(const Data; DataSize, MaskSize: Integer): TBytes;
-// indexed Mask generation function, IEEE P1363 Working Group
-// equal to KDF1 except without Seed
-// RFC 2437 PKCS #1
-begin
-  Result := KDF1(Data, DataSize, NullStr, 0, MaskSize);
-end;
-
-class function TDECHash.MGF1(const Data: TBytes; MaskSize: Integer): TBytes;
-begin
-  Result := KDFInternal(Data[0], Length(Data), NullStr, 0, MaskSize, ktKDF1);
-end;
-
-class function TDECHash.KDF1(const Data; DataSize: Integer; const Seed;
-  SeedSize, MaskSize: Integer): TBytes;
-begin
-  result := KDFInternal(Data, DataSize, Seed, SeedSize, MaskSize, ktKDF1);
-end;
-
-class function TDECHash.KDF1(const Data, Seed: TBytes;
-  MaskSize: Integer): TBytes;
-begin
-  if (length(Seed) > 0) then
-    result := KDFInternal(Data[0], length(Data), Seed[0], length(Seed), MaskSize, ktKDF1)
-  else
-    result := KDFInternal(Data[0], length(Data), NullStr, 0, MaskSize, ktKDF1);
-end;
-
-class function TDECHash.KDF2(const Data; DataSize: Integer; const Seed;
-                             SeedSize, MaskSize: Integer): TBytes;
-begin
-  result := KDFInternal(Data, DataSize, Seed, SeedSize, MaskSize, ktKDF2);
-end;
-
-class function TDECHash.KDF2(const Data, Seed: TBytes; MaskSize: Integer): TBytes;
-begin
-  if (length(Seed) > 0) then
-    Result := KDFInternal(Data[0], Length(Data), Seed[0], Length(Seed), MaskSize, ktKDF2)
-  else
-    Result := KDFInternal(Data[0], Length(Data), NullStr, 0, MaskSize, ktKDF2);
-end;
-
-class function TDECHash.KDF3(const Data; DataSize: Integer; const Seed;
-                             SeedSize, MaskSize: Integer): TBytes;
-begin
-  result := KDFInternal(Data, DataSize, Seed, SeedSize, MaskSize, ktKDF3);
-end;
-
-class function TDECHash.KDF3(const Data, Seed: TBytes; MaskSize: Integer): TBytes;
-begin
-  if (length(Seed) > 0) then
-    Result := KDFInternal(Data[0], Length(Data), Seed[0], Length(Seed), MaskSize, ktKDF3)
-  else
-    Result := KDFInternal(Data[0], Length(Data), NullStr, 0, MaskSize, ktKDF3);
-end;
-
-class function TDECHash.KDFInternal(const Data; DataSize: Integer; const Seed;
-                             SeedSize, MaskSize: Integer; KDFType: TKDFType): TBytes;
-var
-  I, n,
-  Rounds, DigestBytes : Integer;
-  Dest                : PByteArray;
-  Count               : UInt32;
-  HashInstance        : TDECHash;
-begin
-  SetLength(Result, 0);
-  DigestBytes := DigestSize;
-  Assert(MaskSize >= 0);
-  Assert(DataSize >= 0);
-  Assert(SeedSize >= 0);
-  Assert(DigestBytes >= 0);
-
-  HashInstance := TDECHashstype(self).Create;
-  try
-    Rounds := (MaskSize + DigestBytes - 1) div DigestBytes;
-    SetLength(Result, Rounds * DigestBytes);
-    Dest := @Result[0];
-
-
-    if (KDFType = ktKDF2) then
-      n := 1
-    else
-      n := 0;
-
-    for I := 0 to Rounds-1 do
-    begin
-      Count := SwapUInt32(n);
-      HashInstance.Init;
-
-      if (KDFType = ktKDF3) then
-      begin
-        HashInstance.Calc(Count, SizeOf(Count));
-        HashInstance.Calc(Data, DataSize);
-      end
-      else
-      begin
-        HashInstance.Calc(Data, DataSize);
-        HashInstance.Calc(Count, SizeOf(Count));
-      end;
-
-      HashInstance.Calc(Seed, SeedSize);
-      HashInstance.Done;
-      Move(HashInstance.Digest[0], Dest[(I) * DigestBytes], DigestBytes);
-
-      inc(n);
-    end;
-
-    SetLength(Result, MaskSize);
-  finally
-    HashInstance.Free;
-  end;
-end;
-
-class function TDECHash.KDFx(const Data; DataSize: Integer; const Seed; SeedSize, MaskSize: Integer; Index: UInt32 = 1): TBytes;
-// DEC's own KDF, even stronger
-var
-  I, J         : Integer;
-  Count        : UInt32;
-  R            : Byte;
-  HashInstance : TDECHash;
-begin
-  Assert(MaskSize >= 0);
-  Assert(DataSize >= 0);
-  Assert(SeedSize >= 0);
-  Assert(DigestSize > 0);
-
-  SetLength(Result, MaskSize);
-  Index := SwapUInt32(Index);
-
-  HashInstance := TDECHashstype(self).Create;
-  try
-    for I := 0 to MaskSize - 1 do
-    begin
-      HashInstance.Init;
-
-      Count := SwapUInt32(I);
-      HashInstance.Calc(Count, SizeOf(Count));
-      HashInstance.Calc(Result[0], I);
-
-      HashInstance.Calc(Index, SizeOf(Index));
-
-      Count := SwapUInt32(SeedSize);
-      HashInstance.Calc(Count, SizeOf(Count));
-      HashInstance.Calc(Seed, SeedSize);
-
-      Count := SwapUInt32(DataSize);
-      HashInstance.Calc(Count, SizeOf(Count));
-      HashInstance.Calc(Data, DataSize);
-
-      HashInstance.Done;
-
-      R := 0;
-
-      for J := 0 to DigestSize - 1 do
-        R := R xor HashInstance.Digest[J];
-
-      Result[I] := R;
-    end;
-  finally
-    HashInstance.Free;
-  end;
-end;
-
-class function TDECHash.KDFx(const Data, Seed: TBytes; MaskSize: Integer; Index: UInt32 = 1): TBytes;
-begin
-  if (length(Seed) > 0) then
-    Result := KDFx(Data[0], Length(Data), Seed[0], Length(Seed), MaskSize, Index)
-  else
-    Result := KDFx(Data[0], Length(Data), NullStr, Length(Seed), MaskSize, Index)
-end;
-
-class function TDECHash.MGFx(const Data; DataSize, MaskSize: Integer; Index: UInt32 = 1): TBytes;
-begin
-  Result := KDFx(Data, DataSize, NullStr, 0, MaskSize, Index);
-end;
-
-class function TDECHash.MGFx(const Data: TBytes; MaskSize: Integer; Index: UInt32 = 1): TBytes;
-begin
-  Result := KDFx(Data[0], Length(Data), NullStr, 0, MaskSize, Index);
 end;
 
 {$IFDEF DELPHIORBCB}

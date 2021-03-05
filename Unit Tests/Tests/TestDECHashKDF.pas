@@ -21,19 +21,18 @@ unit TestDECHashKDF;
 interface
 
 // Needs to be included before any other statements
-{$I defines.inc}
-{$I ..\..\Source\DECOptions.inc}
+{$INCLUDE TestDefines.inc}
+{$INCLUDE ..\..\Source\DECOptions.inc}
 
 uses
-  {$IFNDEF DUnitX}
-  TestFramework,
-  {$ENDIF}
+  System.Classes, System.SysUtils, Generics.Collections,
   {$IFDEF DUnitX}
   DUnitX.TestFramework,DUnitX.DUnitCompatibility,
+  {$ELSE}
+  TestFramework,
   {$ENDIF}
-  Generics.Collections,
-  TestDECTestDataContainer, DECTypes,
-  DECBaseClass, DECHash, DECHashBase, Classes, SysUtils, DECUtil, DECFormatBase;
+  TestDECTestDataContainer, DECTypes, DECBaseClass, DECHash, DECHashBase,
+  DECHashAuthentication, DECUtil, DECFormatBase;
 
 type
   /// <summary>
@@ -75,7 +74,7 @@ type
     /// <summary>
     ///   Class reference containing the class methods to be tested
     /// </summary>
-    HashClass  : THashClass;
+    HashClass  : TDECHashAuthenticationClass;
     /// <summary>
     ///   Index, which i being used for the KDFx and MGFx variants of the
     ///   original author of DEC
@@ -111,7 +110,7 @@ type
     ///   original author of DEC
     /// </param>
     procedure Add(const InputData, OutputData: RawByteString;
-                  MaskSize : Integer; HashClass: THashClass;
+                  MaskSize : Integer; HashClass: TDECHashAuthenticationClass;
                   AlgorithmType : TKDFMGFAlgorithm = ktKDF1;
                   Index : UInt32 = 1); overload;
     /// <summary>
@@ -140,7 +139,7 @@ type
     ///   original author of DEC
     /// </param>
     procedure Add(const InputData, SeedData, OutputData: RawByteString;
-                  MaskSize : Integer; HashClass: THashClass;
+                  MaskSize : Integer; HashClass: TDECHashAuthenticationClass;
                   AlgorithmType : TKDFMGFAlgorithm = ktKDF1;
                   Index : UInt32 = 1); overload;
   end;
@@ -202,7 +201,6 @@ type
     procedure TestKDFxTBytes;
   end;
 
-
 implementation
 
 uses
@@ -211,7 +209,7 @@ uses
 { TKeyDeviationTestList }
 
 procedure TKeyDeviationTestList.Add(const InputData, OutputData: RawByteString;
-                                    MaskSize: Integer; HashClass: THashClass;
+                                    MaskSize: Integer; HashClass: TDECHashAuthenticationClass;
                                     AlgorithmType : TKDFMGFAlgorithm = ktKDF1;
                                     Index : UInt32 = 1);
 var
@@ -228,7 +226,7 @@ begin
 end;
 
 procedure TKeyDeviationTestList.Add(const InputData, SeedData,
-  OutputData: RawByteString; MaskSize: Integer; HashClass: THashClass;
+  OutputData: RawByteString; MaskSize: Integer; HashClass: TDECHashAuthenticationClass;
   AlgorithmType : TKDFMGFAlgorithm = ktKDF1;
   Index : UInt32 = 1);
 var
@@ -256,9 +254,9 @@ begin
   begin
     if (TestData.Algorithm = KDFType) then
     begin
-      Data := SysUtils.BytesOf(TestData.InputData);
-      Seed := SysUtils.BytesOf(TestData.SeedData);
-      ExpResult := SysUtils.BytesOf(TestData.OutputData);
+      Data := System.SysUtils.BytesOf(TestData.InputData);
+      Seed := System.SysUtils.BytesOf(TestData.SeedData);
+      ExpResult := System.SysUtils.BytesOf(TestData.OutputData);
 
       case KDFType of
         ktKDF1 : if (length(Seed) = 0) then
@@ -307,9 +305,9 @@ begin
   begin
     if (TestData.Algorithm = KDFType) then
     begin
-      Data := SysUtils.BytesOf(TestData.InputData);
-      Seed := SysUtils.BytesOf(TestData.SeedData);
-      ExpResult := SysUtils.BytesOf(TestData.OutputData);
+      Data := System.SysUtils.BytesOf(TestData.InputData);
+      Seed := System.SysUtils.BytesOf(TestData.SeedData);
+      ExpResult := System.SysUtils.BytesOf(TestData.OutputData);
 
       if (KDFType = ktKDF1) then
         Result := TestData.HashClass.KDF1(Data, Seed, TestData.MaskSize);
@@ -648,11 +646,11 @@ end;
 
 initialization
   // Register any test cases with the test runner
-  {$IFNDEF DUnitX}
-  RegisterTests('DECHashKDF', [TestTHash_MGF1.Suite,
-                               TestTHash_KDF.Suite]);
-  {$ELSE}
+  {$IFDEF DUnitX}
   TDUnitX.RegisterTestFixture(TestTHash_MGF1);
   TDUnitX.RegisterTestFixture(TestTHash_KDF);
+  {$ELSE}
+  RegisterTests('DECHashKDF', [TestTHash_MGF1.Suite,
+                               TestTHash_KDF.Suite]);
   {$ENDIF}
 end.
