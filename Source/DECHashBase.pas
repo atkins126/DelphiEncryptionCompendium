@@ -595,7 +595,7 @@ var
       Carry := False;
 
     Value := Value + Add;
-    Carry := Carry or (Value < Add); // set Carry Flag on overflow
+    Carry := Carry or (Value < Add); // set Carry Flag on overflow or keep it if already set
   end;
 
 begin
@@ -728,8 +728,13 @@ begin
   Result := '';
   if Length(Value) > 0 then
   begin
+    {$IF CompilerVersion >= 17.0}
     Size   := Length(Value) * SizeOf(Value[low(Value)]);
     Data   := CalcBuffer(Value[low(Value)], Size);
+    {$ELSE}
+    Size   := Length(Value) * SizeOf(Value[1]);
+    Data   := CalcBuffer(Value[1], Size);
+    {$ENDIF}
     Result := StringOf(ValidFormat(Format).Encode(Data));
   end
   else
@@ -745,10 +750,17 @@ var
 begin
   Result := '';
   if Length(Value) > 0 then
+    {$IF CompilerVersion >= 17.0}
     result := BytesToRawString(
                 ValidFormat(Format).Encode(
                   CalcBuffer(Value[low(Value)],
                              Length(Value) * SizeOf(Value[low(Value)]))))
+    {$ELSE}
+    result := BytesToRawString(
+                ValidFormat(Format).Encode(
+                  CalcBuffer(Value[1],
+                             Length(Value) * SizeOf(Value[1]))))
+    {$ENDIF}
   else
   begin
     SetLength(Buf, 0);

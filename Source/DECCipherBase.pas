@@ -224,12 +224,6 @@ type
     ///   This is the size of FData in byte
     /// </summary>
     FDataSize : Integer;
-
-    /// <summary>
-    ///   Sets the cipher mode, means how each block is being linked with his
-    ///   predecessor to avoid certain attacks
-    /// </summary>
-    procedure SetMode(Value: TCipherMode);
   strict protected
     /// <summary>
     ///   Padding mode used to concatenate/connect blocks in a block cipher
@@ -350,10 +344,22 @@ type
     /// </param>
     procedure DoDecode(Source, Dest: Pointer; Size: Integer); virtual; abstract;
     /// <summary>
-    ///   Securely fills the rocessing buffer with zeroes to make stealing data
+    ///   Securely fills the processing buffer with zeroes to make stealing data
     ///   from memory harder.
     /// </summary>
     procedure SecureErase; virtual;
+
+    /// <summary>
+    ///   Returns the currently set cipher block mode, means how blocks are
+    ///   linked to each other in order to avoid certain attacks.
+    /// </summary>
+    function GetMode: TCipherMode;
+
+    /// <summary>
+    ///   Sets the cipher mode, means how each block is being linked with his
+    ///   predecessor to avoid certain attacks
+    /// </summary>
+    procedure SetMode(Value: TCipherMode);
   public
     /// <summary>
     ///   List of registered DEC classes. Key is the Identity of the class.
@@ -662,7 +668,9 @@ type
     ///   algorithms. For this something from the last entrypted block (or for
     ///   the first block from the vector) is used in the encryption of the next
     ///   block. It may be XORed with the next block cipher text for instance.
-    ///   That data "going into the next block encryption" is this feedback array
+    ///   That data "going into the next block encryption" is stored in this
+    ///   feedback array. The size usually depends on the block size of the
+    ///   cipher algorithm.
     /// </summary>
     property Feedback: PByteArray
       read   FFeedback;
@@ -675,7 +683,7 @@ type
     ///   Mode used for padding data to be encrypted/decrypted. See TCipherMode.
     /// </summary>
     property Mode: TCipherMode
-      read   FMode
+      read   GetMode
       write  SetMode;
 
     /// <summary>
@@ -898,10 +906,19 @@ begin
     raise EDECCipherException.CreateRes(@sNoKeyMaterialGiven);
 
   if Length(IVector) > 0 then
+    {$IF CompilerVersion >= 17.0}
     Init(Key[Low(Key)], Length(Key) * SizeOf(Key[Low(Key)]),
          IVector[Low(IVector)], Length(IVector) * SizeOf(IVector[Low(IVector)]), IFiller)
+    {$ELSE}
+    Init(Key[Low(Key)], Length(Key) * SizeOf(Key[1]),
+         IVector[Low(IVector)], Length(IVector) * SizeOf(IVector[1]), IFiller)
+    {$ENDIF}
   else
+    {$IF CompilerVersion >= 17.0}
     Init(Key[Low(Key)], Length(Key) * SizeOf(Key[Low(Key)]), NullStr, 0, IFiller);
+    {$ELSE}
+    Init(Key[1], Length(Key) * SizeOf(Key[1]), NullStr, 0, IFiller);
+    {$ENDIF}
 end;
 
 
@@ -912,10 +929,19 @@ begin
     raise EDECCipherException.Create(sNoKeyMaterialGiven);
 
   if Length(IVector) > 0 then
+    {$IF CompilerVersion >= 17.0}
     Init(Key[Low(Key)], Length(Key) * SizeOf(Key[Low(Key)]),
-         IVector[Low(IVector)], Length(IVector) * SizeOf(IVector[Low(IVector)]), IFiller)
+         IVector[Low(IVector)], Length(IVector) * SizeOf(Low(IVector)), IFiller)
+    {$ELSE}
+    Init(Key[Low(Key)], Length(Key) * SizeOf(Key[Low(Key)]),
+         IVector[IVector[1]], Length(IVector) * SizeOf(IVector[1]), IFiller)
+    {$ENDIF}
   else
+    {$IF CompilerVersion >= 17.0}
     Init(Key[Low(Key)], Length(Key) * SizeOf(Key[Low(Key)]), NullStr, 0, IFiller);
+    {$ELSE}
+    Init(Key[1], Length(Key) * SizeOf(Key[1]), NullStr, 0, IFiller);
+    {$ENDIF}
 end;
 {$ENDIF}
 
@@ -927,10 +953,19 @@ begin
     raise EDECCipherException.CreateRes(@sNoKeyMaterialGiven);
 
   if Length(IVector) > 0 then
+    {$IF CompilerVersion >= 17.0}
     Init(Key[Low(Key)], Length(Key) * SizeOf(Key[Low(Key)]),
          IVector[Low(IVector)], Length(IVector) * SizeOf(IVector[Low(IVector)]), IFiller)
+    {$ELSE}
+    Init(Key[1], Length(Key) * SizeOf(Key[1]),
+         IVector[1], Length(IVector) * SizeOf(IVector[1]), IFiller)
+    {$ENDIF}
   else
+    {$IF CompilerVersion >= 17.0}
     Init(Key[Low(Key)], Length(Key) * SizeOf(Key[Low(Key)]), NullStr, 0, IFiller);
+    {$ELSE}
+    Init(Key[1], Length(Key) * SizeOf(Key[1]), NullStr, 0, IFiller);
+    {$ENDIF}
 end;
 {$ENDIF}
 
@@ -959,10 +994,20 @@ begin
   SetLength(b, 0);
   if Length(Source) > 0 then
   begin
+    {$IF CompilerVersion >= 17.0}
     SetLength(b, Length(Source) * SizeOf(Source[Low(Source)]));
     DoEncode(@Source[low(Source)], @b[0], Length(Source) * SizeOf(Source[low(Source)]));
+    {$ELSE}
+    SetLength(b, Length(Source) * SizeOf(Source[1]));
+    DoEncode(@Source[1], @b[0], Length(Source) * SizeOf(Source[1]));
+    {$ENDIF}
     Result := BytesToRawString(ValidFormat(Format).Encode(b));
   end;
+end;
+
+function TDECCipher.GetMode: TCipherMode;
+begin
+  Result := FMode;
 end;
 
 function TDECCipher.EncodeBytes(const Source: TBytes; Format: TDECFormatClass = nil): TBytes;
@@ -990,7 +1035,11 @@ begin
     // This has been fixed in 10.3.0 Rio
     b := ValidFormat(Format).Decode(BytesOf(Source));
 
+    {$IF CompilerVersion >= 17.0}
     DoDecode(@b[0], @Result[Low(Result)], Length(Result) * SizeOf(Result[Low(Result)]));
+    {$ELSE}
+    DoDecode(@b[0], @Result[1], Length(Result) * SizeOf(Result[1]));
+    {$ENDIF}
   end;
 end;
 
@@ -1012,7 +1061,7 @@ begin
     raise EDECException.CreateRes(@sInvalidMACMode)
   else
     Result := ValidFormat(Format).Encode(FBuffer^, FBufferSize);
-  { TODO : Wie umschreiben? EncodeBytes direkt kann so nicht aufgerufen werden }
+  { TODO : How to rewrite? EncodeBytes cannot be called directly like that }
 end;
 
 //function TDECCipher.CalcMACByte(Format: TDECFormatClass): TBytes;
