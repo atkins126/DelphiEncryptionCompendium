@@ -36,6 +36,10 @@
 {$UNDEF RESTORE_RANGECHECKS}
 {$UNDEF RESTORE_OVERFLOWCHECKS}
 
+{$UNDEF ManualRegisterFormatClasses}
+{$UNDEF ManualRegisterCipherClasses}
+{$UNDEF ManualRegisterHashClasses}
+
 //------------------------------------------------------------------------------
 // User Configuration (feel free to edit)
 //------------------------------------------------------------------------------
@@ -59,12 +63,15 @@
 // names where possible
 {.$DEFINE OLD_WHIRLPOOL_NAMES} (* default off *)
 
-// when enabling this define, the automatic registration of all those cipher and
-// hash classes in initialization sections is not being done.
-{.$DEFINE ManualRegisterClasses} (* default off *}
-
 // Automatically use DEC's Pseudo Random Number Generator
 {$DEFINE AUTO_PRNG} (* default ON *)
+
+// Automatically register all formatting classes
+{.$DEFINE ManualRegisterFormatClasses} (* default off *)
+// Automatically register all cipher classes
+{.$DEFINE ManualRegisterCipherClasses} (* default off *)
+// Automatically register all hash classes
+{.$DEFINE ManualRegisterHashClasses} (* default off *)
 
 // if the compiler does not support assembler turn usage off and even if restrict
 // it to Windows, as those non Windows platforms which actually do support ASM
@@ -107,6 +114,7 @@
 // Do NOT change anything below!
 //------------------------------------------------------------------------------
 
+{$LEGACYIFEND ON}
 {$DEFINE DELPHIORBCB}
 
 //------------------------------------------------------------------------------
@@ -198,13 +206,19 @@
   {$DEFINE THash_Sapphire_asm}
 
   // The following asm optimized Hashes were incompatible with newer C++
-  // Builder versions. Due to the fact that BCB detection is not implemented
-  // in newer Delphi versions anymore, we leave them out for now:
+  // Builder versions.
+  // This statement of the former developers of the library has not been
+  // verified yet, but just to make sure we disable them for C++ Builder until
+  // we could verify them. Disabling for C++ Builder requires either that
+  // C++ Builder users compile DEC from IDE or with the -DBCB parameter when
+  // compiling from command line
 
-  // {$DEFINE THash_MD2_asm}
-  // {$DEFINE THash_SHA384_asm}
-  // {$DEFINE THash_Tiger_asm}
-  // {$DEFINE THash_Square_asm}
-  // {$DEFINE THash_Snefru128_asm}
-  // {$DEFINE THash_Snefru256_asm}
+  {$IFNDEF BCB}
+   {$DEFINE THash_MD2_asm}
+   {$DEFINE THash_SHA384_asm}
+   {$DEFINE THash_Tiger_asm}
+   {$DEFINE THash_Square_asm}
+   {$DEFINE THash_Snefru128_asm}
+   {$DEFINE THash_Snefru256_asm}
+  {$ENDIF}
 {$ENDIF}

@@ -6347,8 +6347,7 @@ begin
 //    {$IFDEF DELPHIORBCB}
 //    if ATab < AMin then
 //    {$ELSE !DELPHIORBCB}
-{ TODO : Prüfen ob so korrekt, da ATab auf PByte umgestellt wurde, außerdem sollte
-diese interne procedure eher zu einer strict private methode werden}
+{ TODO : Prüfen ob so korrekt, da ATab auf PByte umgestellt wurde}
   if PByte(ATab) < AMin then
 //    {$ENDIF !DELPHIORBCB}
     ATab := AMax;
@@ -6500,8 +6499,6 @@ end;
 
 { TCipher_XTEA_DEC52 }
 
-{ TODO : The old failure needs to be restored again }
-
 procedure TCipher_XTEA_DEC52.DoEncode(Source, Dest: Pointer; Size: Integer);
 var
   Sum,
@@ -6559,7 +6556,7 @@ end;
 initialization
   SetDefaultCipherClass(TCipher_Null);
 
-  {$IFNDEF ManualRegisterClasses}
+  {$IFNDEF ManualRegisterCipherClasses}
   TCipher_Null.RegisterClass(TDECCipher.ClassList);
   TCipher_Blowfish.RegisterClass(TDECCipher.ClassList);
   TCipher_Twofish.RegisterClass(TDECCipher.ClassList);

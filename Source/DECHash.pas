@@ -1,4 +1,4 @@
-{*****************************************************************************
+﻿{*****************************************************************************
   The DEC team (see file NOTICE.txt) licenses this file
   to you under the Apache License, Version 2.0 (the
   "License"); you may not use this file except in compliance
@@ -31,8 +31,8 @@ uses
   {$ELSE}
   System.SysUtils, System.Classes,
   {$ENDIF}
-  DECBaseClass, DECFormatBase, DECUtil, DECHashBase, DECHashAUthentication,
-  DECHashBitBase, DECTypes;
+  DECBaseClass, DECFormatBase, DECUtil, DECHashBase, DECHashAuthentication,
+  DECHashBitBase, DECHashInterface, DECTypes;
 
 type
   // Hash Classes
@@ -53,6 +53,8 @@ type
   THash_SHA3_256    = class;
   THash_SHA3_384    = class;
   THash_SHA3_512    = class;
+  THash_Shake128    = class;
+  THash_Shake256    = class;
   THash_Haval128    = class;
   THash_Haval160    = class;  // Haval 160, 3 Rounds
   THash_Haval192    = class;  // Haval 192, 4 Rounds
@@ -125,7 +127,7 @@ type
   end;
 
   /// <summary>
-  ///   Do not confuse with the original RipeMD algorithm which �s being
+  ///   Do not confuse with the original RipeMD algorithm which ís being
   ///   considered to be unsafe anyway. Considered to be broken due to the only
   ///   128 Bit long message digest result.
   /// </summary>
@@ -346,16 +348,11 @@ type
       ///   Pointer to a buffer
       /// </summary>
       PBABytes = ^TBABytes;
+
       /// <summary>
       ///   Type for the generated hash value
       /// </summary>
-      TSHA3Digest = array[0..63] of UInt8;
-
-    var
-      /// <summary>
-      ///   The generated hash value is stored here
-      /// </summary>
-      FDigest      : TSHA3Digest;
+      TSHA3Digest = array of UInt8;
 
     /// <summary>
     ///   Function to give input data for the sponge function to absorb
@@ -502,6 +499,18 @@ type
     FSpongeState : TSpongeState;
 
     /// <summary>
+    ///   The generated hash value is stored here
+    /// </summary>
+    FDigest      : TSHA3Digest;
+
+    /// <summary>
+    ///   When true, the output length has been set (applicable for the expandable
+    ///   output length algorithm variants named Shake) and needs to be preserved
+    ///   in InitSponge
+    /// </summary>
+    FOutpLengSet : Boolean;
+
+    /// <summary>
     ///   Initializes the state of the Keccak/SHA3 sponge function. It is set to
     ///   the absorbing phase by this. If invalid parameter values are specified
     ///   a EDECHashException will be raised
@@ -532,7 +541,19 @@ type
     ///   Final step of the calculation
     /// </summary>
     procedure DoDone; override;
+
+    /// <summary>
+    ///   Returns the calculated hash value
+    /// </summary>
+    /// <returns>
+    ///   Hash value calculated
+    /// </returns>
+    function Digest: PByteArray; override;
   public
+    /// <summary>
+    ///   Dimension hash result buffer
+    /// </summary>
+    constructor Create; override;
     /// <summary>
     ///   Processes one chunk of data to be hashed.
     /// </summary>
@@ -543,13 +564,6 @@ type
     ///   Size of the data in bytes
     /// </param>
     procedure Calc(const Data; DataSize: Integer); override;
-    /// <summary>
-    ///   Returns the calculated hash value
-    /// </summary>
-    /// <returns>
-    ///   Hash value calculated
-    /// </returns>
-    function Digest: PByteArray; override;
   end;
 
   /// <summary>
@@ -596,14 +610,79 @@ type
     class function DigestSize: UInt32; override;
   end;
 
+  /// <summary>
+  ///   Base class for the Shake implementations
+  /// </summary>
+  THash_ShakeBase = class(THash_SHA3Base, IDECHashExtensibleOutput)
+  private
+    /// <summary>
+    ///   Returns the length of the calculated hash value in byte
+    /// </summary>
+    function  GetHashSize: UInt16;
+    /// <summary>
+    ///   Defines the length of the calculated hash value
+    /// </summary>
+    /// <param name="Value">
+    ///   Length of the hash value to be returned in byte
+    /// </param>
+    procedure SetHashSize(const Value: UInt16);
+  public
+    /// <summary>
+    ///   Returns the calculated hash value as byte array. Needs to be overriden
+    ///   here as the length of the output needs to be determined differently due
+    ///   to Shake being extensible output length.
+    /// </summary>
+    function DigestAsBytes: TBytes; override;
+    /// <summary>
+    ///   Define the lenght of the resulting hash value in byte as these functions
+    ///   are extendable output functions
+    /// </summary>
+    property HashSize : UInt16
+      read   GetHashSize
+      write  SetHashSize;
+  end;
+
+  /// <summary>
+  ///   Shake128 veriant of SHA3
+  /// </summary>
+  THash_Shake128 = class(THash_ShakeBase)
+  protected
+    procedure DoInit; override;
+  public
+    class function BlockSize: UInt32; override;
+    class function DigestSize: UInt32; override;
+  end;
+
+  /// <summary>
+  ///   Shake128 veriant of SHA3
+  /// </summary>
+  THash_Shake256 = class(THash_ShakeBase)
+  protected
+    procedure DoInit; override;
+  public
+    class function BlockSize: UInt32; override;
+    class function DigestSize: UInt32; override;
+  end;
+
   THavalBaseTransformMethod = procedure(Buffer: PUInt32Array) of object;
 
-  THashBaseHaval = class(TDECHashAuthentication)
+  /// <summary>
+  ///   Base class for all Haval implementations
+  /// </summary>
+  THashBaseHaval = class(TDECHashAuthentication, IDECHashRounds)
   private
     FDigest: array[0..7] of UInt32;
+      /// <summary>
+      ///   UInt32 for compatibility with 32 bit ASM implementation
+      /// </summary>
     FRounds: UInt32;
     FTransform: THavalBaseTransformMethod;
+    /// <summary>
+    ///   Defines the number of calculation rounds and if a value outside the
+    ///   allowed range is given it sets rounds to a value based on digest size.
+    /// </summary>
     procedure SetRounds(Value: UInt32);
+    function  GetRounds: UInt32;
   protected
     procedure DoInit; override;
     procedure DoTransform(Buffer: PUInt32Array); override;
@@ -614,15 +693,16 @@ type
   public
     function Digest: PByteArray; override;
     class function BlockSize: UInt32; override;
+    /// <summary>
     ///   Returns the minimum possible number for the rounds parameter.
     ///   Value depends on Digest size which depends on concrete implementation
     /// </summary>
-    class function GetMinRounds: UInt8;
+    function GetMinRounds: UInt32;
     /// <summary>
     ///   Returns the maximum possible number for the rounds parameter.
     ///   Value depends on Digest size which depends on concrete implementation
     /// </summary>
-    class function GetMaxRounds: UInt8;
+    function GetMaxRounds: UInt32;
 
     /// <summary>
     ///   Defines the number of rounds the algorithm performs on the input data.
@@ -632,7 +712,7 @@ type
     ///   bigger values to 5. For 3 rounds the algorithm is considered unsafe,
     ///   as in 2003 collisions could be found with a setting of 3 rounds only.
     /// </summary>
-    property Rounds: UInt32 read FRounds write SetRounds default 3;
+    property Rounds: UInt32 read GetRounds write SetRounds default 3;
   end;
 
   /// <summary>
@@ -670,7 +750,7 @@ type
   ///   to the rounds property. It is considered to be unsafe at least in the
   ///   192 Bit variant!
   /// </summary>
-  THash_Tiger = class(THashBaseMD4)
+  THash_Tiger = class(THashBaseMD4, IDECHashRounds)
   private
     const
       /// <summary>
@@ -684,8 +764,12 @@ type
       /// </summary>
       cTigerMaxRounds = 32;
     var
-      FRounds: Integer;
-      procedure SetRounds(Value: Integer);
+      /// <summary>
+      ///   UInt32 for compatibility with 32 bit ASM implementation
+      /// </summary>
+      FRounds: UInt32;
+      function  GetRounds: UInt32;
+      procedure SetRounds(Value: UInt32);
   protected
     procedure DoInit; override;
     procedure DoTransform(Buffer: PUInt32Array); override;
@@ -694,11 +778,11 @@ type
     /// <summary>
     ///   Returns the minimum possible number for the rounds parameter
     /// </summary>
-    class function GetMinRounds: UInt8;
+    function GetMinRounds: UInt32;
     /// <summary>
     ///   Returns the maximum possible number for the rounds parameter
     /// </summary>
-    class function GetMaxRounds: UInt8;
+    function GetMaxRounds: UInt32;
 
     /// <summary>
     ///   Defines the number of rounds the algorithm will perform on the data
@@ -706,7 +790,7 @@ type
     ///   outside this range will lead to a rounds value of 3 or 32 to be used,
     ///   depending on whether a lower or higher value has been given.
     /// </summary>
-    property Rounds: Integer read FRounds write SetRounds default 3;
+    property Rounds: UInt32 read GetRounds write SetRounds default 3;
   end;
 
   /// <summary>
@@ -836,17 +920,19 @@ type
   ///   This 1990 developed hash function was named after the Egyptian Pharaoh
   ///   Sneferu. Be sure to set SecurityLevel to at least 8. See remark there.
   /// </summary>
-  THashBaseSnefru = class(TDECHashAuthentication)
+  THashBaseSnefru = class(TDECHashAuthentication, IDECHashRounds)
   private
     FDigest: array[0..23] of UInt32;
     /// <summary>
-    ///   Number of rounds the loop will do on the data
+    ///   Number of rounds the loop will do on the data.
+    ///   UInt32 for compatibility with 32 bit ASM implementation
     /// </summary>
-    FRounds: Integer;
+    FRounds: UInt32;
     /// <summary>
     ///   Sets the number of rounds for the looping over the data
     /// </summary>
-    procedure SetRounds(Value: Integer);
+    procedure SetRounds(Value: UInt32);
+    function  GetRounds: UInt32;
   protected
     procedure DoInit; override;
     procedure DoDone; override;
@@ -855,11 +941,11 @@ type
     ///   Returns the minimum possible number for the rounds parameter.
     ///   Value depends on Digest size which depends on concrete implementation
     /// </summary>
-    class function GetMinRounds: UInt8;
+    function GetMinRounds: UInt32;
     ///   Returns the maximum possible number for the rounds parameter.
     ///   Value depends on Digest size which depends on concrete implementation
     /// </summary>
-    class function GetMaxRounds: UInt8;
+    function GetMaxRounds: UInt32;
 
     /// <summary>
     ///   Can be set from 2 to 8, default is 8. This is the number of rounds the
@@ -867,8 +953,8 @@ type
     ///   as safe as of spring 2016, with less rounds this algorithm is considered
     ///   to be unsafe and even with 8 rounds it is not really strong.
     /// </summary>
-    property Rounds: Integer
-      read   FRounds
+    property Rounds: UInt32
+      read   GetRounds
       write  SetRounds;
   end;
 
@@ -1005,8 +1091,12 @@ resourcestring
   ///   Failure message when absorb is callt with a bitlength not divideable by 8
   ///   without reminder or when it is called while already in squeezing state
   /// </summary>
-  aSHA3AbsorbFailure = 'Absorb: number of bits mod 8 <> 0 or squeezing active. Bits: %0:d, '+
+  sSHA3AbsorbFailure = 'Absorb: number of bits mod 8 <> 0 or squeezing active. Bits: %0:d, '+
                        'Squeezing: %1:s';
+  /// <summary>
+  ///   Part of the failure message shown when setting HashSize of Shake algorithms to 0
+  /// </summary>
+  sHashOutputLength0 = 'HashSize must not be 0';
 
 { THash_MD2 }
 
@@ -2521,7 +2611,7 @@ end;
 
 procedure THashBaseHaval.SetRounds(Value: UInt32);
 begin
-  if (Value < 3) or (Value > 5) then
+  if (Value < GetMinRounds) or (Value > 5) then
   begin
     if DigestSize <= 20 then
       Value := 3
@@ -2559,12 +2649,12 @@ begin
   FTransform(Buffer);
 end;
 
-class function THashBaseHaval.GetMaxRounds: UInt8;
+function THashBaseHaval.GetMaxRounds: UInt32;
 begin
   Result := 5;
 end;
 
-class function THashBaseHaval.GetMinRounds: UInt8;
+function THashBaseHaval.GetMinRounds: UInt32;
 begin
   if DigestSize <= 20 then
     Result := 3
@@ -2575,6 +2665,11 @@ begin
     else
       Result := 5;
   end;
+end;
+
+function THashBaseHaval.GetRounds: UInt32;
+begin
+  Result := FRounds;
 end;
 
 {$IFNDEF THashBaseHaval_asm}
@@ -2797,7 +2892,7 @@ begin
     FBufferIndex := 0;
   end;
   FillChar(FBuffer[FBufferIndex], FBufferSize - FBufferIndex - 10, 0);
-  T := DigestSize shl 9 or FRounds shl 3 or 1;
+  T := (DigestSize shl 9) or (UInt32(FRounds) shl 3) or 1;
   Move(T, FBuffer[FBufferSize - 10], SizeOf(T));
   Move(FCount, FBuffer[FBufferSize - 8], 8);
   DoTransform(Pointer(FBuffer));
@@ -2911,14 +3006,14 @@ end;
 
 { THash_Tiger }
 
-procedure THash_Tiger.SetRounds(Value: Integer);
+procedure THash_Tiger.SetRounds(Value: UInt32);
 begin
   if (Value < cTigerMinRounds) then
     Value := cTigerMinRounds;
-    
+
   if (Value > cTigerMaxRounds) then
     Value := cTigerMaxRounds;
-    
+
   FRounds := Value;
 end;
 
@@ -2935,6 +3030,7 @@ begin
   FDigest[5] := $F096A5B4;
 end;
 
+{$IFNDEF THash_Tiger_asm}
 procedure THash_Tiger.DoTransform(Buffer: PUInt32Array);
 type
   PTiger_Data = ^TTiger_Data;
@@ -3149,15 +3245,21 @@ begin
   PInt64Array(@FDigest)[1] := B  -  PInt64Array(@FDigest)[1];
   PInt64Array(@FDigest)[2] := C  +  PInt64Array(@FDigest)[2];
 end;
+{$ENDIF}
 
-class function THash_Tiger.GetMaxRounds: UInt8;
+function THash_Tiger.GetMaxRounds: UInt32;
 begin
   Result := cTigerMaxRounds;
 end;
 
-class function THash_Tiger.GetMinRounds: UInt8;
+function THash_Tiger.GetMinRounds: UInt32;
 begin
   Result := cTigerMinRounds;
+end;
+
+function THash_Tiger.GetRounds: UInt32;
+begin
+  Result := FRounds;
 end;
 
 class function THash_Tiger.DigestSize: UInt32;
@@ -3777,7 +3879,7 @@ end;
 
 { THashBaseSnefru }
 
-procedure THashBaseSnefru.SetRounds(Value: Integer);
+procedure THashBaseSnefru.SetRounds(Value: UInt32);
 begin
   if (Value < 2) or (Value > 8) then
     Value := 8;
@@ -3790,14 +3892,19 @@ begin
   SetRounds(FRounds);
 end;
 
-class function THashBaseSnefru.GetMaxRounds: UInt8;
+function THashBaseSnefru.GetMaxRounds: UInt32;
 begin
   Result := 8;
 end;
 
-class function THashBaseSnefru.GetMinRounds: UInt8;
+function THashBaseSnefru.GetMinRounds: UInt32;
 begin
   Result := 2;
+end;
+
+function THashBaseSnefru.GetRounds: UInt32;
+begin
+  Result := FRounds;
 end;
 
 procedure THashBaseSnefru.DoDone;
@@ -4133,11 +4240,58 @@ begin
   FSpongeState.fixedOutputLength := 512;
 end;
 
+{ THash_Shake128 }
+
+class function THash_Shake128.BlockSize: UInt32;
+begin
+  Result := 168;
+end;
+
+class function THash_Shake128.DigestSize: UInt32;
+begin
+  // 0 because the hash output length is defined via HashSize property at runtime
+  Result := 0;
+end;
+
+procedure THash_Shake128.DoInit;
+begin
+  inherited;
+
+  InitSponge(1344, 256);
+end;
+
+{ THash_Shake256 }
+
+class function THash_Shake256.BlockSize: UInt32;
+begin
+  Result := 136;
+end;
+
+class function THash_Shake256.DigestSize: UInt32;
+begin
+  // 0 because the hash output length is defined via HashSize property at runtime
+  Result := 0;
+end;
+
+procedure THash_Shake256.DoInit;
+begin
+  inherited;
+
+  InitSponge(1088, 512);
+end;
+
 { THash_SHA3Base }
 
 procedure THash_SHA3Base.InitSponge(Rate, Capacity: UInt16);
+var
+  OutputLengthBackup : UInt16;
 begin
-  // This is the only place where state.error is reset to 0 = SUCCESS
+  if FOutpLengSet then
+    OutputLengthBackup := FSpongeState.FixedOutputLength
+  else
+    // Suppress compiler warning about potentially uninitialized variable
+    OutputLengthBackup := 0;
+
   FillChar(FSpongeState, SizeOf(FSpongeState), 0);
 
   if (Rate + Capacity <> 1600) or (Rate = 0) or (Rate >= 1600) or
@@ -4148,6 +4302,9 @@ begin
 
   FSpongeState.Rate     := Rate;
   FSpongeState.Capacity := Capacity;
+
+  if FOutpLengSet then
+    FSpongeState.FixedOutputLength := OutputLengthBackup;
 end;
 
 procedure THash_SHA3Base.KeccakAbsorb(var state: TState_B; data: PUInt64; laneCount: Integer);
@@ -4329,7 +4486,7 @@ begin
 
   // Only multiple of 8 bits are allowed, truncation must be done at user level
   if OutputLength and 7 <> 0 then
-    raise EDECHashException.CreateFmt(aSHA3AbsorbFailure,
+    raise EDECHashException.CreateFmt(sSHA3AbsorbFailure,
                                  [OutputLength, 'true']);
 
   i := 0;
@@ -4378,7 +4535,7 @@ begin
   // queue or algorithm is already in squeezing state
   if (FSpongeState.BitsInQueue and 7 <> 0) or FSpongeState.SqueezeActive then
   begin
-    raise EDECHashException.CreateFmt(aSHA3AbsorbFailure,
+    raise EDECHashException.CreateFmt(sSHA3AbsorbFailure,
                                      [FSpongeState.BitsInQueue,
                                       BoolToStr(FSpongeState.SqueezeActive, true)]);
   end;
@@ -4461,9 +4618,17 @@ begin
   end;
 end;
 
+constructor THash_SHA3Base.Create;
+begin
+  inherited;
+
+  FOutpLengSet := false;
+  SetLength(FDigest, 64);
+end;
+
 function THash_SHA3Base.Digest: PByteArray;
 begin
-  Result := @FDigest;
+  Result := @FDigest[0];
 end;
 
 procedure THash_SHA3Base.DoDone;
@@ -4492,7 +4657,7 @@ begin
     Absorb(Data, DataBitLen - (DataBitLen and 7));
 
     // Align the last partial byte to the least significant bits
-    LastByte := PBABytes(Data)^[DataBitLen div 8] shr (8 - (DataBitLen and 7));
+    LastByte := PBABytes(Data)^[DatabitLen div 8] shr (8 - (DataBitLen and 7));
     Absorb(@LastByte, DataBitLen and 7);
   end;
 end;
@@ -4526,7 +4691,8 @@ begin
     lw := Bits and pred(word(1) shl Bitlen);
 
   // 'append' (in LSB language) the domain separation bits
-  if (FSpongeState.FixedOutputLength = 0) then
+  //if (FSpongeState.FixedOutputLength = 0) then
+  if self.ClassParent = THash_ShakeBase then
   begin
     lw := lw or (word($F) shl Bitlen);
     WorkingBitLen := Bitlen+4;
@@ -4567,11 +4733,42 @@ begin
 // to suppress the compiler warning that a class with an abstract method is created
 end;
 
+{ THash_ShakeBase }
+
+function THash_ShakeBase.GetHashSize: UInt16;
+begin
+  // divided by 8 since this field is in bits
+  Result := FSpongeState.FixedOutputLength shr 3;
+end;
+
+procedure THash_ShakeBase.SetHashSize(const Value: UInt16);
+begin
+  if (Value = 0) then
+    raise EDECHashException.CreateResFmt(@sHashInitFailure,
+                                         [GetShortClassName, sHashOutputLength0]);
+
+  // multiplied with 8 since this field is in bits
+  FSpongeState.FixedOutputLength := Value * 8;
+  // This flag tells the initialization of the algorithm that
+  // FixedOutputLength needs to be preserved
+  FOutpLengSet := true;
+
+  SetLength(FDigest, Value);
+  FillChar(FDigest[0], Length(FDigest), #0);
+end;
+
+function THash_ShakeBase.DigestAsBytes: TBytes;
+begin
+  SetLength(Result, FSpongeState.FixedOutputLength shr 3);
+  if FSpongeState.FixedOutputLength > 0 then
+    Move(Digest^, Result[0], Length(Result));
+end;
+
 initialization
   // Define the has returned by ValidHash if passing nil as parameter
   SetDefaultHashClass(THash_SHA256);
 
-  {$IFNDEF ManualRegisterClasses}
+  {$IFNDEF ManualRegisterHashClasses}
   THash_MD2.RegisterClass(TDECHash.ClassList);
   THash_MD4.RegisterClass(TDECHash.ClassList);
   THash_MD5.RegisterClass(TDECHash.ClassList);
@@ -4589,6 +4786,8 @@ initialization
   THash_SHA3_256.RegisterClass(TDECHash.ClassList);
   THash_SHA3_384.RegisterClass(TDECHash.ClassList);
   THash_SHA3_512.RegisterClass(TDECHash.ClassList);
+  THash_Shake128.RegisterClass(TDECHash.ClassList);
+  THash_Shake256.RegisterClass(TDECHash.ClassList);
   THash_Haval128.RegisterClass(TDECHash.ClassList);
   THash_Haval160.RegisterClass(TDECHash.ClassList);
   THash_Haval192.RegisterClass(TDECHash.ClassList);
@@ -4597,13 +4796,13 @@ initialization
   THash_Tiger.RegisterClass(TDECHash.ClassList);
   THash_Panama.RegisterClass(TDECHash.ClassList);
 
-  {$IFDEF OLD_WHIRLPOOL_NAMES}
-  THash_Whirlpool.RegisterClass(TDECHash.ClassList);
-  THash_Whirlpool1.RegisterClass(TDECHash.ClassList);
-  THash_Whirlpool1New.RegisterClass(TDECHash.ClassList);
-  {$ELSE}
-  THash_Whirlpool1.RegisterClass(TDECHash.ClassList);
-  {$ENDIF}
+    {$IFDEF OLD_WHIRLPOOL_NAMES}
+    THash_Whirlpool.RegisterClass(TDECHash.ClassList);
+    THash_Whirlpool1.RegisterClass(TDECHash.ClassList);
+    THash_Whirlpool1New.RegisterClass(TDECHash.ClassList);
+    {$ELSE}
+    THash_Whirlpool1.RegisterClass(TDECHash.ClassList);
+    {$ENDIF}
 
   THash_Whirlpool0.RegisterClass(TDECHash.ClassList);
   THash_WhirlpoolT.RegisterClass(TDECHash.ClassList);
@@ -4613,14 +4812,14 @@ initialization
   THash_Snefru256.RegisterClass(TDECHash.ClassList);
   THash_Sapphire.RegisterClass(TDECHash.ClassList);
 
-  {$IFDEF OLD_SHA_NAME}
-  THash_SHA.RegisterClass(TDECHash.ClassList);
-  {$ENDIF}
+    {$IFDEF OLD_SHA_NAME}
+    THash_SHA.RegisterClass(TDECHash.ClassList);
+    {$ENDIF}
 
   {$ENDIF}
 
 finalization
   // No need to unregister the hash classes, as the list is being freed
-  // in finalization of DECBaseClass unit
+  // in finalization of DECHashBase unit
 
 end.

@@ -47,8 +47,7 @@ type
       read   GetVector; default;
 
     function AddInputVector(const aData:RawByteString; const aRunCount:UInt32=1;
-                            const aConcatCount:UInt32=1;
-                            const aFinalBitCount:UInt32 = 0):ITestDataInputVector;
+                            const aConcatCount:UInt32=1):ITestDataInputVector;
   end;
 
   ITestDataRow = interface
@@ -127,14 +126,34 @@ type
     /// <param name="aValue">
     ///   Number of bits of the last byte within the test data to process
     /// </param>
-    procedure SetFinalBitLength(const aValue: Int16);
+    procedure SetFinalByteBitLength(const aValue: UInt16);
+    /// <summary>
+    ///   Required parameter for extensible output hash functions like Shake128/256.
+    ///   For those the length of the Hash generated from the data can be specified
+    ///   in byte with this parameter.
+    /// </summary>
+    /// <param name="aValue">
+    ///   Length of the hash calculated in byte
+    /// </param>
+    procedure SetHashResultByteLength(const aValue: UInt16);
+    /// <summary>
+    ///   Some hash algorithms have a round parameter which defines how often
+    ///   the algorithm loops over the data
+    /// </summary>
+    /// <param name="aValue">
+    ///   Number of rounds to set. Such hash algorithms having rounds normally
+    ///   have specification limits for those rounds, so one should not specify
+    ///   values outside the range given by GetMinRounds/GetMaxRounds methods of
+    ///   these algorithms.
+    /// </param>
+    procedure SetRounds(const aValue: UInt32);
 
     /// <summary>
     ///   Specifies the length of the hash value generated for those hash classes
     ///   which support configurable output lengths. The length is specified in
     ///   byte.
     /// </summary>
-    property RequiredDigestSize : UInt32
+    property RequiredDigestSize   : UInt32
       Write  SetRequiredDigestSize;
 
     /// <summary>
@@ -144,7 +163,7 @@ type
     ///   completely. This property specifies how many bits of the last byte shall
     ///   be processed.
     /// </summary>
-    property PaddingByte        : Byte
+    property PaddingByte          : Byte
       Write  SetPaddingByte;
     /// <summary>
     ///   Required parameter for SHA3 tests: SHA3 allows to specify the number of
@@ -153,8 +172,21 @@ type
     ///   completely. This property specifies how many bits of the last byte shall
     ///   be processed.
     /// </summary>
-    property FinalBitLength     : Int16
-      write  SetFinalBitLength;
+    property FinalBitLength       : UInt16
+      write  SetFinalByteBitLength;
+    /// <summary>
+    ///   Required parameter for extensible output hash functions like Shake128/256.
+    ///   For those the length of the Hash generated from the data can be specified
+    ///   in byte with this parameter.
+    /// </summary>
+    property HashResultByteLength : UInt16
+      write  SetHashResultByteLength;
+    /// <summary>
+    ///   Some hash algorithms have a round parameter which defines how often
+    ///   the algorithm loops over the data
+    /// </summary>
+    property Rounds               : UInt32
+      write  SetRounds;
   end;
 
   IHashTestDataRow = interface(ITestDataRow)
@@ -188,13 +220,29 @@ type
     ///   completely. This property specifies how many bits of the last byte shall
     ///   be processed.
     /// </summary>
-    function GetFinalBitLength:Int16;
+    function GetFinalByteBitLength:UInt16;
+
+    /// <summary>
+    ///   Required parameter for extensible output hash functions like Shake128/256.
+    ///   For those the length of the Hash generated from the data can be specified
+    ///   in byte with this parameter.
+    /// </summary>
+    function GetHashResultByteLength:UInt16;
+
+    /// <summary>
+    ///   Some hash algorithms have a round parameter which defines how often
+    ///   the algorithm loops over the data
+    /// </summary>
+    /// <returns>
+    ///   Number of rounds to test
+    /// </returns>
+    function GetRounds:UInt32;
 
     /// <summary>
     ///   Gets the length in bytes of the hash value generated for those
     ///   hash classes which support configurable output lengths.
     /// </summary>
-    property RequiredDigestSize : UInt32
+    property RequiredDigestSize   : UInt32
       read   GetRequiredDigestSize;
     /// <summary>
     ///   Required parameter for SHA3 tests: SHA3 allows to specify the number of
@@ -208,7 +256,7 @@ type
     ///   SHA3's feature of bit length specification of the input data is being
     ///   used.
     /// </summary>
-    property PaddingByte        : Byte
+    property PaddingByte          : Byte
       read   GetPaddingByte;
     /// <summary>
     ///   Required parameter for SHA3 tests: SHA3 allows to specify the number of
@@ -217,8 +265,22 @@ type
     ///   completely. This property specifies how many bits of the last byte shall
     ///   be processed.
     /// </summary>
-    property FinalByteLength     : Int16
-      read   GetFinalBitLength;
+    property FinalByteBitLength   : UInt16
+      read   GetFinalByteBitLength;
+    /// <summary>
+    ///   Required parameter for extensible output hash functions like Shake128/256.
+    ///   For those the length of the Hash generated from the data can be specified
+    ///   in byte with this parameter.
+    /// </summary>
+    property HashResultByteLength : UInt16
+      read   GetHashResultByteLength;
+
+    /// <summary>
+    ///   Some hash algorithms have a round parameter which defines how often
+    ///   the algorithm loops over the data
+    /// </summary>
+    property Rounds               : UInt32
+      read   GetRounds;
   end;
 
   IHashTestDataContainer = interface(ITestDataContainer)
@@ -242,12 +304,11 @@ type
   private
     FData          : RawByteString;
     FRunCount      : UInt32;
-    FFinalBitCount : UInt32;
   protected // ITestDataInputVector
     function GetRunCount:UInt32;
     function GetData:RawByteString;
   public
-    constructor Create(const aData:RawByteString; const aRunCount:UInt32; const aFinalBitCOunt: UInt32);
+    constructor Create(const aData:RawByteString; const aRunCount:UInt32);
   end;
 
   /// <summary>
@@ -289,20 +350,12 @@ type
     ///   Number of times aData is being concatenated to form the real input data
     ///   for this test vector
     /// </param>
-    /// <param name="aFinalBitCount">
-{ TODO : Rework comment as far as necessary after implementing this }
-    ///   some hash algorithms allow to specify the size of the data to calculate
-    ///   the hash from in bits. If this parameter is set to a value > 0 the last
-    ///   byte of the data specified in aData is not hashed with the "Calc" method
-    ///   but the aFinalBitCount number of bits from it are hashed in Done or so...
-    /// </param>
     /// <returns>
     ///   An interface to the generated test vector
     /// </returns>
     function AddInputVector(const aData:RawByteString;
                             const aRunCount:UInt32=1;
-                            const aConcatCount:UInt32=1;
-                            const aFinalBitCount:UInt32 = 0):ITestDataInputVector;
+                            const aConcatCount:UInt32=1):ITestDataInputVector;
   public
     constructor Create;
     destructor Destroy; override;
@@ -311,13 +364,39 @@ type
   THashTestDataRow = class(TInterfacedObject, ITestDataRow, ITestDataRowSetup,
                            IHashTestDataRow, IHashTestDataRowSetup)
   private
-    FInputData:RawByteString;
-    FInputVectors:ITestDataInputVectorList;
-    FOutputData:RawByteString;
-    FOutputUTFStrTest:RawByteString;
-    FReqDigSize:UInt32;
-    FPaddingByte:Byte;
-    FFinalBitLength: Int16;
+    /// <summary>
+    ///   Data to feed the hash algorithm, means to run the test on
+    /// </summary>
+    FInputData            : RawByteString;
+    FInputVectors         : ITestDataInputVectorList;
+    /// <summary>
+    ///   Expected test result
+    /// </summary>
+    FOutputData           : RawByteString;
+    /// <summary>
+    ///   Expected test result for the Unicode tests
+    /// </summary>
+    FOutputUTFStrTest     : RawByteString;
+    /// <summary>
+    ///
+    /// </summary>
+    FReqDigSize           : UInt32;
+    FPaddingByte          : Byte;
+    /// <summary>
+    ///   Number of bits of the last byte of the message considered when
+    ///   calculating the hash. Only used for some hash algorithms.
+    /// </summary>
+    FFinalByteBitLength   : UInt16;
+    /// <summary>
+    ///   Length of the hash value calculated. Used for extensible hash
+    ///   functions only
+    /// </summary>
+    FHashResultByteLength : UInt16;
+    /// <summary>
+    ///   Some hash algorithms have a round parameter which defines how often
+    ///   the algorithm loops over the data
+    /// </summary>
+    FRounds               : UInt32;
   protected // ITestDataRow
     function GetInputData:RawByteString;
     function GetInputVectors:ITestDataInputVectorList;
@@ -326,8 +405,8 @@ type
   protected // ITestDataRowSetup
     procedure SetExpectedOutput(const aValue:RawByteString);
     procedure SetExpectedOutputUTFStrTest(const aValue:RawByteString);
-    procedure AddInputVector(const aData:RawByteString; const aRunCount:UInt32=1;
-                             const aConcatCount:UInt32=1);
+    procedure AddInputVector(const aData:RawByteString; const aRunCount:UInt32 = 1;
+                             const aConcatCount:UInt32 = 1);
   protected // IHashTestDataRow
     /// <summary>
     ///   Gets the length of the hash value generated for those hash classes
@@ -351,7 +430,25 @@ type
     ///   used.
     /// </returns>
     function GetPaddingByte:Byte;
-    function GetFinalBitLength:Int16;
+    /// <summary>
+    ///   Returns how many bits of the last byte of the message to be hashed
+    ///   shall be considered for hashing.
+    /// </summary>
+    function GetFinalByteBitLength:UInt16;
+    /// <summary>
+    ///   Required parameter for extensible output hash functions like Shake128/256.
+    ///   For those the length of the Hash generated from the data can be specified
+    ///   in byte with this parameter.
+    /// </summary>
+    function GetHashResultByteLength:UInt16;
+    /// <summary>
+    ///   Some hash algorithms have a round parameter which defines how often
+    ///   the algorithm loops over the data
+    /// </summary>
+    /// <returns>
+    ///   Number of rounds to test
+    /// </returns>
+    function GetRounds:UInt32;
   protected // IHashTestDataRowSetup
     /// <summary>
     ///   Specifies the length of the hash value generated for those hash classes
@@ -385,7 +482,27 @@ type
     /// <param name="aValue">
     ///   Number of bits of the last byte within the test data to process
     /// </param>
-    procedure SetFinalBitLength(const aValue: Int16);
+    procedure SetFinalByteBitLength(const aValue: UInt16);
+    /// <summary>
+    ///   Required parameter for extensible output hash functions like Shake128/256.
+    ///   For those the length of the Hash generated from the data can be specified
+    ///   in byte with this parameter.
+    /// </summary>
+    /// <param name="aValue">
+    ///   Length of the hash calculated in byte
+    /// </param>
+    procedure SetHashResultByteLength(const aValue: UInt16);
+    /// <summary>
+    ///   Some hash algorithms have a round parameter which defines how often
+    ///   the algorithm loops over the data
+    /// </summary>
+    /// <param name="aValue">
+    ///   Number of rounds to set. Such hash algorithms having rounds normally
+    ///   have specification limits for those rounds, so one should not specify
+    ///   values outside the range given by GetMinRounds/GetMaxRounds methods of
+    ///   these algorithms.
+    /// </param>
+    procedure SetRounds(const aValue: UInt32);
   public
     constructor Create;
     destructor Destroy; override;
@@ -485,9 +602,14 @@ begin
   inherited;
 end;
 
-function THashTestDataRow.GetFinalBitLength: Int16;
+function THashTestDataRow.GetFinalByteBitLength: UInt16;
 begin
-  result := FFinalBitLength;
+  result := FFinalByteBitLength;
+end;
+
+function THashTestDataRow.GetHashResultByteLength: UInt16;
+begin
+  result := FHashResultByteLength;
 end;
 
 function THashTestDataRow.GetInputData: RawByteString;
@@ -520,6 +642,11 @@ begin
   result := FReqDigSize;
 end;
 
+function THashTestDataRow.GetRounds: UInt32;
+begin
+  Result := FRounds;
+end;
+
 procedure THashTestDataRow.SetExpectedOutput(const aValue: RawByteString);
 begin
   FOutputData := aValue;
@@ -530,9 +657,14 @@ begin
   FOutputUTFStrTest := aValue;
 end;
 
-procedure THashTestDataRow.SetFinalBitLength(const aValue: Int16);
+procedure THashTestDataRow.SetFinalByteBitLength(const aValue: UInt16);
 begin
-  FFinalBitLength := aValue;
+  FFinalByteBitLength := aValue;
+end;
+
+procedure THashTestDataRow.SetHashResultByteLength(const aValue: UInt16);
+begin
+  FHashResultByteLength := aValue;
 end;
 
 procedure THashTestDataRow.SetPaddingByte(const aValue: Byte);
@@ -545,11 +677,15 @@ begin
   FReqDigSize := aValue;
 end;
 
+procedure THashTestDataRow.SetRounds(const aValue: UInt32);
+begin
+  FRounds := aValue;
+end;
+
 { TTestDataInputVectorContainer }
 
 function TTestDataInputVectorList.AddInputVector(const aData:RawByteString;
-           const aRunCount:UInt32=1; const aConcatCount:UInt32=1;
-           const aFinalBitCount:UInt32 = 0):ITestDataInputVector;
+           const aRunCount:UInt32=1; const aConcatCount:UInt32=1):ITestDataInputVector;
 var
   lData : RawByteString;
   Idx   : Integer;
@@ -559,7 +695,7 @@ begin
   begin
     lData := lData + aData;
   end;
-  Result := TTestDataInputVector.Create(lData, aRunCount, aFinalBitCount);
+  Result := TTestDataInputVector.Create(lData, aRunCount);
   FVectors.Add(Result);
 end;
 
@@ -588,13 +724,11 @@ end;
 { TTestDataInputVector }
 
 constructor TTestDataInputVector.Create(const aData: RawByteString;
-                                        const aRunCount: UInt32;
-                                        const aFinalBitCOunt: UInt32);
+                                        const aRunCount: UInt32);
 begin
   inherited Create;
   FData          := aData;
   FRunCount      := aRunCount;
-  FFinalBitCount := aFinalBitCount;
 end;
 
 function TTestDataInputVector.GetData: RawByteString;

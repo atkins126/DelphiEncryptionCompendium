@@ -101,6 +101,27 @@ type
     FTestData  : IHashTestDataContainer;
     FHash      : TDECHashAuthentication;
 
+    /// <summary>
+    ///   Checks whether a given property exists and if it does sets it to the
+    ///   value specified.
+    /// </summary>
+    /// <param name="aInstance">
+    ///   Object instance to check
+    /// </param>
+    /// <param name="PropertyName">
+    ///   Name of the property, not sure if this is case sensitive. The property
+    ///   must be public or published to be found
+    /// </param>
+    /// <param name="Value">
+    ///   Value to set the property to. Supported property types currently are:
+    ///   Integer, Int64, Float, String and UString.
+    /// </param>
+    /// <returns>
+    ///   true if the property was found and the datatype of it was supported,
+    ///   else false
+    /// </returns>
+    function SetPropertyValue(aInstance: TObject; const PropertyName, Value: string):Boolean;
+
     // kind of "low-level" test, close to the original test used in DEC5.2
     procedure DoTest52(HashClass:TDECHash);
 
@@ -333,6 +354,8 @@ type
     procedure TestIdentity;
     procedure TestGetMaxRounds;
     procedure TestGetMinRounds;
+    procedure TestSetRoundsMax;
+    procedure TestSetRoundsMin;
   end;
 
   // Test methods for class THash_Haval160
@@ -348,6 +371,8 @@ type
     procedure TestIdentity;
     procedure TestGetMaxRounds;
     procedure TestGetMinRounds;
+    procedure TestSetRoundsMax;
+    procedure TestSetRoundsMin;
   end;
 
   // Test methods for class THash_Haval192
@@ -363,6 +388,8 @@ type
     procedure TestIdentity;
     procedure TestGetMaxRounds;
     procedure TestGetMinRounds;
+    procedure TestSetRoundsMax;
+    procedure TestSetRoundsMin;
   end;
 
   // Test methods for class THash_Haval224
@@ -378,6 +405,8 @@ type
     procedure TestIdentity;
     procedure TestGetMaxRounds;
     procedure TestGetMinRounds;
+    procedure TestSetRoundsMax;
+    procedure TestSetRoundsMin;
   end;
 
   // Test methods for class THash_Haval256
@@ -393,6 +422,8 @@ type
     procedure TestIdentity;
     procedure TestGetMaxRounds;
     procedure TestGetMinRounds;
+    procedure TestSetRoundsMax;
+    procedure TestSetRoundsMin;
   end;
 
   // Test methods for class THash_Tiger
@@ -406,31 +437,14 @@ type
     procedure TestSetRoundsUpperLimit;
     procedure TestGetMinRounds;
     procedure TestGetMaxRounds;
+    procedure TestSetRoundsMin;
+    procedure TestSetRoundsMax;
 
     procedure TestDigestSize;
     procedure TestBlockSize;
     procedure TestIsPasswordHash;
     procedure TestClassByName;
     procedure TestIdentity;
-  end;
-
-  // Test methods for class THash_Tiger
-  {$IFDEF DUnitX} [TestFixture] {$ENDIF}
-  TestTHash_Tiger_4Rounds = class(THash_TestBase)
-  public
-    procedure SetUp; override;
-  published
-    procedure TestSetRounds;
-    procedure TestSetRoundsLowerLimit;
-    procedure TestSetRoundsUpperLimit;
-
-    procedure TestDigestSize;
-    procedure TestBlockSize;
-    procedure TestIsPasswordHash;
-    procedure TestClassByName;
-    // not implemented as it's unnecessary as only the number of rounds is
-    // different and not the class to be tested
-    // procedure TestIdentity;
   end;
 
   // Test methods for class THash_Panama
@@ -537,6 +551,8 @@ type
     procedure TestIdentity;
     procedure TestGetMinRounds;
     procedure TestGetMaxRounds;
+    procedure TestSetRoundsMin;
+    procedure TestSetRoundsMax;
   end;
 
   // Test methods for class THash_Snefru256
@@ -552,6 +568,8 @@ type
     procedure TestIdentity;
     procedure TestGetMinRounds;
     procedure TestGetMaxRounds;
+    procedure TestSetRoundsMin;
+    procedure TestSetRoundsMax;
   end;
 
   // Test methods for class THash_Sapphire
@@ -572,6 +590,7 @@ type
 implementation
 
 uses
+  System.TypInfo, System.Rtti,
   DECFormat;
 
 procedure TestTHash_MD2.SetUp;
@@ -1920,6 +1939,41 @@ begin
   DoTestClassByName('THash_SHA512', THash_SHA512);
 end;
 
+{ TestTHash_HavalBase }
+
+procedure TestTHash_Haval128.TestSetRoundsMax;
+var
+  Hash : THash_Haval128;
+begin
+  Hash := FHash as THash_Haval128;
+
+  Hash.Rounds := Hash.GetMinRounds;
+
+  Hash.Rounds := Hash.GetMaxRounds;
+  CheckEquals(5, Hash.Rounds);
+
+  Hash.Rounds := 3;
+  CheckEquals(3, Hash.Rounds);
+
+  Hash.Rounds := Hash.GetMaxRounds + 1;
+  CheckEquals(3, Hash.Rounds);
+end;
+
+procedure TestTHash_Haval128.TestSetRoundsMin;
+var
+  Hash : THash_Haval128;
+begin
+  Hash := FHash as THash_Haval128;
+
+  Hash.Rounds := Hash.GetMaxRounds;
+  CheckEquals(5, Hash.Rounds);
+
+  Hash.Rounds := Hash.GetMinRounds - 1;
+  CheckEquals(3, Hash.Rounds);
+end;
+
+{ TestTHash_Haval128 }
+
 procedure TestTHash_Haval128.SetUp;
 var lDataRow:IHashTestDataRowSetup;
 begin
@@ -1933,30 +1987,35 @@ begin
   lDataRow.ExpectedOutput           := 'c68f39913f901f3ddf44c707357a7d70';
   lDataRow.ExpectedOutputUTFStrTest := 'c68f39913f901f3ddf44c707357a7d70';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '0cd40739683e15f01ca5dbceef4059f1';
   lDataRow.ExpectedOutputUTFStrTest := 'f2ac5ac2aae01fc184ef399da42d5865';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('a');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'dc1f3c893d17cc4edd9ae94af76a0af0';
   lDataRow.ExpectedOutputUTFStrTest := 'b0b47bdc3c2434256b49c77675bd0aab';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('HAVAL');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'd4be2164ef387d9f4d46ea8efb180cf5';
   lDataRow.ExpectedOutputUTFStrTest := 'a74975d492868f80184a785e163d6a1a';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('0123456789');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'dc502247fb3eb8376109eda32d361d82';
   lDataRow.ExpectedOutputUTFStrTest := '6f2851b51a880c8d725dbddcc7274382';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('abcdefghijklm');
   lDataRow.AddInputVector('nopqrstuvwxyz');
   // SourceEnd
@@ -1965,36 +2024,42 @@ begin
   lDataRow.ExpectedOutput           := 'de5eb3f7d9eb08fae7a07d68e3047ec6';
   lDataRow.ExpectedOutputUTFStrTest := 'f68c39679f1660c0504feaa4d5958587';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '4806b64dae93d3606308310a439e2a3a';
   lDataRow.ExpectedOutputUTFStrTest := 'dc48ac538e085f81571d4a64aca44fe4';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('This test vector intended to detect last zeroized block necessity decision error. For this detection it is 117 bytes.');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '8beaa7dd5bb591c8009e429d79041813';
   lDataRow.ExpectedOutputUTFStrTest := '7669b7e0b3a872b8f4f48c5351c4c9c5';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 15625, 1);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '8beaa7dd5bb591c8009e429d79041813';
   lDataRow.ExpectedOutputUTFStrTest := '7669b7e0b3a872b8f4f48c5351c4c9c5';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 15625);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '1bdc556b29ad02ec09af8c66477f2a87';
   lDataRow.ExpectedOutputUTFStrTest := '1bdc556b29ad02ec09af8c66477f2a87';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '24d2bc955a219e3e06462c91b555cfa1';
   lDataRow.ExpectedOutputUTFStrTest := 'fa53172579efb3ba63cf4b32e4f66bdd';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('a');
 
 
@@ -2002,18 +2067,21 @@ begin
   lDataRow.ExpectedOutput           := '16c743e5eefd3266ed50deac6c30313e';
   lDataRow.ExpectedOutputUTFStrTest := 'c0716b442299437c01885a4e6335b2c2';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('HAVAL');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '82d163440f6e853229a97007ec4af0e5';
   lDataRow.ExpectedOutputUTFStrTest := '9eb5e08841eb1cdab920d91660339340';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('0123456789');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '92e8ec9ad7fd209d97e9ce21b50440e9';
   lDataRow.ExpectedOutputUTFStrTest := '0389809978badf696ea0290488be3ddd';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('abcdefghijklm');
   lDataRow.AddInputVector('nopqrstuvwxyz');
 
@@ -2021,25 +2089,58 @@ begin
   lDataRow.ExpectedOutput           := '4ae2f37cef9275cce0d73f6a1eb9cdd8';
   lDataRow.ExpectedOutputUTFStrTest := '821ea5eb3f12c7cb429eb4f44c60112c';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '3e1846cda3c9542944672b7150d0f38c';
   lDataRow.ExpectedOutputUTFStrTest := '67c7f95b227d60218508df6c7b4b9fe2';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('This test vector intended to detect last zeroized block necessity decision error. For this detection it is 117 bytes.');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '41b74ec225c9fb7a8e24840a98141b39';
   lDataRow.ExpectedOutputUTFStrTest := '85b87eb2cfdf9dc3e6bf25b654c28f5c';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 15625, 1);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '41b74ec225c9fb7a8e24840a98141b39';
   lDataRow.ExpectedOutputUTFStrTest := '85b87eb2cfdf9dc3e6bf25b654c28f5c';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 15625);
+
+  // Self generated variants with different rounds
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'ee6bbf4d6a46a679b3a856c88538bb98';
+  lDataRow.ExpectedOutputUTFStrTest := 'ee6bbf4d6a46a679b3a856c88538bb98';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '5cd07f03330c3b5020b29ba75911e17d';
+  lDataRow.ExpectedOutputUTFStrTest := '972ebb528aa1d753cd2e9cbcbb4b1bc5';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '184b8482a0c050dca54b59c7f05bf5dd';
+  lDataRow.ExpectedOutputUTFStrTest := '184b8482a0c050dca54b59c7f05bf5dd';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 5;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'f23fbe704be8494bfa7a7fb4f8ab09e5';
+  lDataRow.ExpectedOutputUTFStrTest := 'cb0c4214d3cf2739e60db8c453df8aca';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 5;
+  lDataRow.AddInputVector('a');
 end;
 
 procedure TestTHash_Haval128.TestDigestSize;
@@ -2090,36 +2191,42 @@ begin
   lDataRow.ExpectedOutput           := 'd353c3ae22a25401d257643836d7231a9a95f953';
   lDataRow.ExpectedOutputUTFStrTest := 'd353c3ae22a25401d257643836d7231a9a95f953';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '4da08f514a7275dbc4cece4a347385983983a830';
   lDataRow.ExpectedOutputUTFStrTest := 'd976681ea27160c08ebab0032a76653fae848376';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('a');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '8822bc6f3e694e73798920c77ce3245120dd8214';
   lDataRow.ExpectedOutputUTFStrTest := 'cb5a03288450a452caec0e9154cb56ccaa007361';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('HAVAL');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'be68981eb3ebd3f6748b081ee5d4e1818f9ba86c';
   lDataRow.ExpectedOutputUTFStrTest := '5433add25965d4cef4158530ea11d9cabf5dfae0';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('0123456789');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'eba9fa6050f24c07c29d1834a60900ea4e32e61b';
   lDataRow.ExpectedOutputUTFStrTest := '4461ef31738d14dca0ad4419f5421c50b05310d3';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('abcdefghijklmnopqrstuvwxyz');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '97dc988d97caae757be7523c4e8d4ea63007a4b9';
   lDataRow.ExpectedOutputUTFStrTest := 'e7052bbd65c7608cf0589f6471d85d7c0f02a6fd';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789');
   // SourceEnd
 
@@ -2127,74 +2234,116 @@ begin
   lDataRow.ExpectedOutput           := 'ba27e0d51b9ba140804252413c52b42dfe97214b';
   lDataRow.ExpectedOutputUTFStrTest := '1eecea4c278e9a797bbcfce396dcebca7243623b';
   lDataRow.PaddingByte              := 1;
-  lDataRow.AddInputVector('This test vector intended to detect last zeroized block necessity decision error. For this detection it is 117 bytes.');
+  lDataRow.Rounds                   := 3;
+  lDataRow.AddInputVector('This test vector intended to detect last zeroized block '+
+                          'necessity decision error. For this detection it is 117 bytes.');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '5ea7fa9a0236aad66a1da8f161985c6e3dae2b81';
   lDataRow.ExpectedOutputUTFStrTest := 'b0de8db36f55ea32b57d4333114d4a9d47ce53cd';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 15625, 1);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '5ea7fa9a0236aad66a1da8f161985c6e3dae2b81';
   lDataRow.ExpectedOutputUTFStrTest := 'b0de8db36f55ea32b57d4333114d4a9d47ce53cd';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 15625);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'fe79d0a044ffb75d5354668d664e4f4b9cc33477';
   lDataRow.ExpectedOutputUTFStrTest := 'fe79d0a044ffb75d5354668d664e4f4b9cc33477';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '5e1610fced1d3adb0bb18e92ac2b11f0bd99d8ed';
   lDataRow.ExpectedOutputUTFStrTest := '871624bcbb8c01039b10dbd18f4e85ef2847beec';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('a');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '8e568ad6ccd58d17e0a11e92183232e0d1d2e9bf';
   lDataRow.ExpectedOutputUTFStrTest := '53374669cfde8f3a5013ff3ba218ce84d4fe0764';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('HAVAL');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '700d43a9b5e38300303fd4e25a6a326beb4a2241';
   lDataRow.ExpectedOutputUTFStrTest := '92acab606db474de51c93cb812b125f0a71c413b';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('0123456789');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '1dd40aeab9610585fcae7492ff3b893c2a018f4e';
   lDataRow.ExpectedOutputUTFStrTest := '93cc27c8f8e834a0ecc86f7e15dd25eddc4439f5';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('abcdefghijklmnopqrstuvwxyz');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '485abb76ed2f5ac8bb86ddeb8cb4c54cf5bb077b';
   lDataRow.ExpectedOutputUTFStrTest := '82424bfabb7afd551fb01478e0bc26099300cd1b';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '7e3ec827726ae5ce4f4f67614395aa1c0602551a';
   lDataRow.ExpectedOutputUTFStrTest := '297a10aab083211007ffa25be84fcfdb9cb8a94d';
   lDataRow.PaddingByte              := 128;
-  lDataRow.AddInputVector('This test vector intended to detect last zeroized block necessity decision error. For this detection it is 117 bytes.');
+  lDataRow.Rounds                   := 3;
+  lDataRow.AddInputVector('This test vector intended to detect last zeroized block '+
+                          'necessity decision error. For this detection it is 117 bytes.');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '687e9073f7ec5f01ea4744b86ef40e13aaacf0a4';
   lDataRow.ExpectedOutputUTFStrTest := 'd65ef2dcb081c97494e84407033cb29415a80730';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 15625, 1);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '687e9073f7ec5f01ea4744b86ef40e13aaacf0a4';
   lDataRow.ExpectedOutputUTFStrTest := 'd65ef2dcb081c97494e84407033cb29415a80730';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 15625);
 
+  // Self generated variants with different rows
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '1d33aae1be4146dbaaca0b6e70d7a11f10801525';
+  lDataRow.ExpectedOutputUTFStrTest := '1d33aae1be4146dbaaca0b6e70d7a11f10801525';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'e0a5be29627332034d4dd8a910a1a0e6fe04084d';
+  lDataRow.ExpectedOutputUTFStrTest := '441d327d5d29815bacf33565a73430843ed4a87e';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '255158cfc1eed1a7be7c55ddd64d9790415b933b';
+  lDataRow.ExpectedOutputUTFStrTest := '255158cfc1eed1a7be7c55ddd64d9790415b933b';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 5;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'f5147df7abc5e3c81b031268927c2b5761b5a2b5';
+  lDataRow.ExpectedOutputUTFStrTest := '00eb3b4c72b8d6ac5f99332c40208de1af44760b';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 5;
+  lDataRow.AddInputVector('a');
 end;
 
 procedure TestTHash_Haval160.TestDigestSize;
@@ -2222,6 +2371,37 @@ begin
   CheckNotEquals(true, FHash.IsPasswordHash);
 end;
 
+procedure TestTHash_Haval160.TestSetRoundsMax;
+var
+  Hash : THash_Haval160;
+begin
+  Hash := FHash as THash_Haval160;
+
+  Hash.Rounds := Hash.GetMinRounds;
+
+  Hash.Rounds := Hash.GetMaxRounds;
+  CheckEquals(5, Hash.Rounds);
+
+  Hash.Rounds := 3;
+  CheckEquals(3, Hash.Rounds);
+
+  Hash.Rounds := Hash.GetMaxRounds + 1;
+  CheckEquals(3, Hash.Rounds);
+end;
+
+procedure TestTHash_Haval160.TestSetRoundsMin;
+var
+  Hash : THash_Haval160;
+begin
+  Hash := FHash as THash_Haval160;
+
+  Hash.Rounds := Hash.GetMaxRounds;
+  CheckEquals(5, Hash.Rounds);
+
+  Hash.Rounds := Hash.GetMinRounds - 1;
+  CheckEquals(3, Hash.Rounds);
+end;
+
 procedure TestTHash_Haval160.TestBlockSize;
 begin
   CheckEquals(128, FHash.BlockSize);
@@ -2245,36 +2425,42 @@ begin
   lDataRow.ExpectedOutput           := '4a8372945afa55c7dead800311272523ca19d42ea47b72da';
   lDataRow.ExpectedOutputUTFStrTest := '4a8372945afa55c7dead800311272523ca19d42ea47b72da';
   lDataRow.AddInputVector('');
-  lDataRow.PaddingByte      := 1;
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '856c19f86214ea9a8a2f0c4b758b973cce72a2d8ff55505c';
   lDataRow.ExpectedOutputUTFStrTest := 'ea49939cb5a812d962cb3593dd37e35cdcd208961be61bf5';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('a');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '0c1396d7772689c46773f3daaca4efa982adbfb2f1467eea';
   lDataRow.ExpectedOutputUTFStrTest := '5eb34e664e18f78da615ab3424243c49b054af95722509e8';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('HAVAL');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'c3a5420bb9d7d82a168f6624e954aaa9cdc69fb0f67d785e';
   lDataRow.ExpectedOutputUTFStrTest := 'ca16d8d258a68bb8443fe6185558e44f34ddad8ba86199e0';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('0123456789');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '2e2e581d725e799fda1948c75e85a28cfe1cf0c6324a1ada';
   lDataRow.ExpectedOutputUTFStrTest := '368df8981494d39560453be6860b2290eced3cf8087d4147';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('abcdefghijklmnopqrstuvwxyz');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'e5c9f81ae0b31fc8780fc37cb63bb4ec96496f79a9b58344';
   lDataRow.ExpectedOutputUTFStrTest := 'd1458c150e3330016f0ebdb1f7003e0eba960739a6830923';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789');
   // SourceEnd
 
@@ -2282,73 +2468,102 @@ begin
   lDataRow.ExpectedOutput           := '8c80602a16fcca8332c08446ea61a2fbc74e05d3361f0e4d';
   lDataRow.ExpectedOutputUTFStrTest := '517f983928861f8a86402101e500fb613070177cfc93914c';
   lDataRow.PaddingByte              := 1;
-  lDataRow.AddInputVector('This test vector intended to detect last zeroized block necessity decision error. For this detection it is 117 bytes.');
+  lDataRow.Rounds                   := 4;
+  lDataRow.AddInputVector('This test vector intended to detect last zeroized block necessity '+
+                          'decision error. For this detection it is 117 bytes.');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'aa15056802a32823332dd551ebe3e39918d6bc9e1fa293b1';
   lDataRow.ExpectedOutputUTFStrTest := '80c428dfb6bc4179803c47f840a98ffeb527b491b06cdfd6';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 15625, 1);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'aa15056802a32823332dd551ebe3e39918d6bc9e1fa293b1';
   lDataRow.ExpectedOutputUTFStrTest := '80c428dfb6bc4179803c47f840a98ffeb527b491b06cdfd6';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 15625);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '51fa9e28c96865207ed6dae2eaa1d8af6e7de2783ebec4b4';
   lDataRow.ExpectedOutputUTFStrTest := '51fa9e28c96865207ed6dae2eaa1d8af6e7de2783ebec4b4';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'a1446e6cedb4b28bc6e13d4d1d2694e9ce4a3d942c73589e';
   lDataRow.ExpectedOutputUTFStrTest := '157776b815376afdba30a5de81cb2c3eaa6d28ed7b19bbad';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('a');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '74aa31182ff09bcce453a7f71b5a7c5e80872fa90cd93ae4';
   lDataRow.ExpectedOutputUTFStrTest := '056003283fb434178a1ff76764812885196cdc74604c967b';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('HAVAL');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'ca05546ffa4b69dafa7c04424cc10802a2523efcb8bebb61';
   lDataRow.ExpectedOutputUTFStrTest := '2d95bdbb37c3c74118c739030345f0acd66551b3cd6486d7';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('0123456789');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '5a238735d9e902e16cad81229cc981a763508c73f4a52dd0';
   lDataRow.ExpectedOutputUTFStrTest := '3dc4298f38dced830191e2d6aa012304ddba79dbad83cd05';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('abcdefghijklmnopqrstuvwxyz');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'd51d73eb03b0d841c24f2007aa9159f0f70a971cbfbed33c';
   lDataRow.ExpectedOutputUTFStrTest := 'cfcd7add4233885ec083a5a25662b29afbcbbcb4e6f081c7';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '1cee084b711ef399076a4cfa095a81dc6e1667f3c8207204';
   lDataRow.ExpectedOutputUTFStrTest := '6e2c2b45cc4efd0422ae3a6c0cf4dc9a400a901723881733';
   lDataRow.PaddingByte              := 128;
-  lDataRow.AddInputVector('This test vector intended to detect last zeroized block necessity decision error. For this detection it is 117 bytes.');
+  lDataRow.Rounds                   := 4;
+  lDataRow.AddInputVector('This test vector intended to detect last zeroized block necessity '+
+                          'decision error. For this detection it is 117 bytes.');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'f5608294798348bfa3fc45f72954a0e980b15804b4c56674';
   lDataRow.ExpectedOutputUTFStrTest := 'ff7c15641ca292000ba31bb863b7f3b524943e2ed64c4b12';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 15625, 1);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'f5608294798348bfa3fc45f72954a0e980b15804b4c56674';
   lDataRow.ExpectedOutputUTFStrTest := 'ff7c15641ca292000ba31bb863b7f3b524943e2ed64c4b12';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 15625);
+
+  // Self generated variants with different rows
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '4839d0626f95935e17ee2fc4509387bbe2cc46cb382ffe85';
+  lDataRow.ExpectedOutputUTFStrTest := '4839d0626f95935e17ee2fc4509387bbe2cc46cb382ffe85';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 5;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '5ffa3b3548a6e2cfc06b7908ceb5263595df67cf9c4b9341';
+  lDataRow.ExpectedOutputUTFStrTest := 'f7a1cd5310024e2f8aa48e1240011cd0c60961e9b7286039';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 5;
+  lDataRow.AddInputVector('a');
 end;
 
 procedure TestTHash_Haval192.TestDigestSize;
@@ -2376,6 +2591,37 @@ begin
   CheckNotEquals(true, FHash.IsPasswordHash);
 end;
 
+procedure TestTHash_Haval192.TestSetRoundsMax;
+var
+  Hash : THash_Haval192;
+begin
+  Hash := FHash as THash_Haval192;
+
+  Hash.Rounds := Hash.GetMinRounds;
+
+  Hash.Rounds := Hash.GetMaxRounds;
+  CheckEquals(5, Hash.Rounds);
+
+  Hash.Rounds := 3;
+  CheckEquals(4, Hash.Rounds);
+
+  Hash.Rounds := Hash.GetMaxRounds + 1;
+  CheckEquals(4, Hash.Rounds);
+end;
+
+procedure TestTHash_Haval192.TestSetRoundsMin;
+var
+  Hash : THash_Haval192;
+begin
+  Hash := FHash as THash_Haval192;
+
+  Hash.Rounds := Hash.GetMaxRounds;
+  CheckEquals(5, Hash.Rounds);
+
+  Hash.Rounds := Hash.GetMinRounds - 1;
+  CheckEquals(4, Hash.Rounds);
+end;
+
 procedure TestTHash_Haval192.TestBlockSize;
 begin
   CheckEquals(128, FHash.BlockSize);
@@ -2399,36 +2645,42 @@ begin
   lDataRow.ExpectedOutput           := '3e56243275b3b81561750550e36fcd676ad2f5dd9e15f2e89e6ed78e';
   lDataRow.ExpectedOutputUTFStrTest := '3e56243275b3b81561750550e36fcd676ad2f5dd9e15f2e89e6ed78e';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '742f1dbeeaf17f74960558b44f08aa98bdc7d967e6c0ab8f799b3ac1';
   lDataRow.ExpectedOutputUTFStrTest := '949b0e1c272fad467366c614cb79c878f648363c6e34e4a6af2bf0c9';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('a');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '85538ffc06f3b1c693c792c49175639666f1dde227da8bd000c1e6b4';
   lDataRow.ExpectedOutputUTFStrTest := 'c731136eca1d43c14c0fa34544776e06f1a911ebd245a7ae4cd6624d';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('HAVAL');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'bebd7816f09baeecf8903b1b9bc672d9fa428e462ba699f814841529';
   lDataRow.ExpectedOutputUTFStrTest := '97c760aec423f4f0d4fab68e0ea57ca00a402ca258c41495bf396337';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('0123456789');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'a0ac696cdb2030fa67f6cc1d14613b1962a7b69b4378a9a1b9738796';
   lDataRow.ExpectedOutputUTFStrTest := '03973c5c75dcc59f28d7b7798ebe75a9cc4d6d14316ac615e8d9977c';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('abcdefghijklmnopqrstuvwxyz');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '3e63c95727e0cd85d42034191314401e42ab9063a94772647e3e8e0f';
   lDataRow.ExpectedOutputUTFStrTest := '09293b232655058426832f0ceb13ff041688f4fa43243b66a2c19677';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789');
   // SourceEnd
 
@@ -2436,73 +2688,102 @@ begin
   lDataRow.ExpectedOutput           := 'adf788362468585753a4ebb59c44c8934d2995c6305beb9345ddf485';
   lDataRow.ExpectedOutputUTFStrTest := '0f4b666b0257088fe15e05a8b738c9bb7955b62369df9994b92049fe';
   lDataRow.PaddingByte              := 1;
-  lDataRow.AddInputVector('This test vector intended to detect last zeroized block necessity decision error. For this detection it is 117 bytes.');
+  lDataRow.Rounds                   := 4;
+  lDataRow.AddInputVector('This test vector intended to detect last zeroized block necessity '+
+                          'decision error. For this detection it is 117 bytes.');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '0d53e2e5e768707ab94070f6f9b8accd9ad831076780443a2e659fdc';
   lDataRow.ExpectedOutputUTFStrTest := 'e0d9ddda7cbdcde1ae543990fc5462193140b97c82646ce9379d751c';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 15625, 1);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '0d53e2e5e768707ab94070f6f9b8accd9ad831076780443a2e659fdc';
   lDataRow.ExpectedOutputUTFStrTest := 'e0d9ddda7cbdcde1ae543990fc5462193140b97c82646ce9379d751c';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 15625);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'aacd8950b239b05e8a40a0419afd3bbed206623913d8a6dfe71d174b';
   lDataRow.ExpectedOutputUTFStrTest := 'aacd8950b239b05e8a40a0419afd3bbed206623913d8a6dfe71d174b';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '54a26096c951725228d34a1b55c2db5c28446e6b243fe2ae78623a4b';
   lDataRow.ExpectedOutputUTFStrTest := 'a4575897b531c3e05a50f950639c47b65ec5e4047af26410773aeb52';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('a');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'f9040eebae11709245501beffb5fb849f88a9086f24df3a55a03a01a';
   lDataRow.ExpectedOutputUTFStrTest := '4eaeb545094367efa73ad92f0c4eff66d3ed8ad57c125bbfe4f98c74';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('HAVAL');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '144cb2de11f05df7c356282a3b485796da653f6b702868c7dcf4ae76';
   lDataRow.ExpectedOutputUTFStrTest := 'c2762d3cfced507c48dd8e0827cffb020c26239cd8fcebcd65ddadb7';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('0123456789');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'fbb63f06592fb9aa4f59652b99bc53c1ff72675726c71326c682dabc';
   lDataRow.ExpectedOutputUTFStrTest := 'b8cd24f40b7a9f3ba95e5249b1fdb61df93090f85fb50973ccab8c4c';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('abcdefghijklmnopqrstuvwxyz');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '1120b26105044df0b4e5b904705f3b8cbbc14a52b73301c300baff8a';
   lDataRow.ExpectedOutputUTFStrTest := 'e427422e29d14a7371874ebc3e3b04ab96766954074c8e7345b6fa10';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '752a1ee3fc2185888a421e148d6a3b8fb33ac20ba0668598c11d755a';
   lDataRow.ExpectedOutputUTFStrTest := '4ead6b5944f5453f9f8abf9c863687ac0e7d6b5906d8334f5f334b38';
   lDataRow.PaddingByte              := 128;
-  lDataRow.AddInputVector('This test vector intended to detect last zeroized block necessity decision error. For this detection it is 117 bytes.');
+  lDataRow.Rounds                   := 4;
+  lDataRow.AddInputVector('This test vector intended to detect last zeroized block necessity '+
+                          'decision error. For this detection it is 117 bytes.');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'aff21cea7b3294dd02e6de843650fe82eb51cdd1e9d8873b13834717';
   lDataRow.ExpectedOutputUTFStrTest := 'ece302f7e317c2bbab56f1e29ac123441a241297f5696465f8b7ed6d';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 15625, 1);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'aff21cea7b3294dd02e6de843650fe82eb51cdd1e9d8873b13834717';
   lDataRow.ExpectedOutputUTFStrTest := 'ece302f7e317c2bbab56f1e29ac123441a241297f5696465f8b7ed6d';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 4;
   lDataRow.AddInputVector('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 15625);
+
+  // Self generated variants with different rows
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '4a0513c032754f5582a758d35917ac9adf3854219b39e3ac77d1837e';
+  lDataRow.ExpectedOutputUTFStrTest := '4a0513c032754f5582a758d35917ac9adf3854219b39e3ac77d1837e';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 5;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '67b3cb8d4068e3641fa4f156e03b52978b421947328bfb9168c7655d';
+  lDataRow.ExpectedOutputUTFStrTest := '388826fda119989238a74d9c4a146d699a16f774c0f2c3d503114e6f';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 5;
+  lDataRow.AddInputVector('a');
 end;
 
 procedure TestTHash_Haval224.TestDigestSize;
@@ -2530,6 +2811,43 @@ begin
   CheckNotEquals(true, FHash.IsPasswordHash);
 end;
 
+procedure TestTHash_Haval224.TestSetRoundsMax;
+var
+  Hash : THash_Haval224;
+begin
+  Hash := FHash as THash_Haval224;
+
+  Hash.Rounds := Hash.GetMinRounds;
+
+  Hash.Rounds := Hash.GetMaxRounds;
+  CheckEquals(5, Hash.Rounds);
+
+  Hash.Rounds := 4;
+  CheckEquals(4, Hash.Rounds);
+
+  Hash.Rounds := Hash.GetMaxRounds + 1;
+  CheckEquals(4, Hash.Rounds);
+end;
+
+procedure TestTHash_Haval224.TestSetRoundsMin;
+var
+  Hash : THash_Haval224;
+begin
+  Hash := FHash as THash_Haval224;
+
+  Hash.Rounds := Hash.GetMaxRounds;
+  CheckEquals(5, Hash.Rounds);
+
+  Hash.Rounds := Hash.GetMinRounds;
+  CheckEquals(4, Hash.Rounds);
+
+  Hash.Rounds := 5;
+  CheckEquals(5, Hash.Rounds);
+
+  Hash.Rounds := Hash.GetMinRounds - 1;
+  CheckEquals(4, Hash.Rounds);
+end;
+
 procedure TestTHash_Haval224.TestBlockSize;
 begin
   CheckEquals(128, FHash.BlockSize);
@@ -2547,43 +2865,41 @@ begin
 
   FHash := THash_Haval256.Create;
 
-{ TODO :
-We need to create a method to be able to specify the rounds used
-for a given test for these classes which support that.
-But: for the HAVAL algorithms this can only be set after calling DoInit/Init,
-as in DoInit the number of rounds is initialized depending on the output
-hash value length. }
-
   // Source until SourceEnd: https://web.archive.org/web/20120206072234/http://
   // Rounds: 5               labs.calyptix.com/haval-1.1.tar.gz
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'be417bb4dd5cfb76c7126f4f8eeb1553a449039307b1a3cd451dbfdc0fbbe330';
   lDataRow.ExpectedOutputUTFStrTest := 'be417bb4dd5cfb76c7126f4f8eeb1553a449039307b1a3cd451dbfdc0fbbe330';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 5;
   lDataRow.AddInputVector('');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'de8fd5ee72a5e4265af0a756f4e1a1f65c9b2b2f47cf17ecf0d1b88679a3e22f';
   lDataRow.ExpectedOutputUTFStrTest := '42f59f1483a46c33f1d8c19a2b3bfafc5ad8855b6be91f02b1238476764c709f';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 5;
   lDataRow.AddInputVector('a');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '153d2c81cd3c24249ab7cd476934287af845af37f53f51f5c7e2be99ba28443f';
   lDataRow.ExpectedOutputUTFStrTest := '3c94e3e4c74a5c873d8f9a12636ec216ff0b8033e03ec6e584ff4c3d294a86db';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 5;
   lDataRow.AddInputVector('HAVAL');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '357e2032774abbf5f04d5f1dec665112ea03b23e6e00425d0df75ea155813126';
   lDataRow.ExpectedOutputUTFStrTest := 'f4abfc9b62f537b3d525b91f05653ef6ee439896921256aaf5f6e808172fad38';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 5;
   lDataRow.AddInputVector('0123456789');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'c9c7d8afa159fd9e965cb83ff5ee6f58aeda352c0eff005548153a61551c38ee';
   lDataRow.ExpectedOutputUTFStrTest := '7d4093dcdac779c9e9e2598f70b0ba8d64fb091b6af7c499348676ffd3611334';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 5;
   lDataRow.AddInputVector('ab');
   lDataRow.AddInputVector('cdefghijklmnopqrstuvwxyz');
 
@@ -2591,6 +2907,7 @@ hash value length. }
   lDataRow.ExpectedOutput           := 'b45cb6e62f2b1320e4f8f1b0b273d45add47c321fd23999dcf403ac37636d963';
   lDataRow.ExpectedOutputUTFStrTest := '41cf38ae494b0ff1edc06d99b5085026a057da244a4f62f5882a71cadf6b9054';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 5;
   lDataRow.AddInputVector('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg');
   lDataRow.AddInputVector('hijklmnopqrstuvwxyz012345678');
   lDataRow.AddInputVector('9');
@@ -2600,54 +2917,64 @@ hash value length. }
   lDataRow.ExpectedOutput           := '42bb773476b0e978e7fa7414b2e7ecf0dc0a2accb96ade5d815d0e4706969272';
   lDataRow.ExpectedOutputUTFStrTest := 'acff80b9410d5116f98979c2440c3fdb0337279cb19971f7946958628d2178fc';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 5;
   lDataRow.AddInputVector('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz01234567899876543210', 2);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'e7467dad3b4f59c182a7869816ec15c8b59e4c5038ff5afbff60e6d44041a670';
   lDataRow.ExpectedOutputUTFStrTest := '982f54d460ebe0221fd30391c0b58d139ef98335ffb5ba4551a4cd4b7fb9596e';
   lDataRow.PaddingByte              := 1;
-  lDataRow.AddInputVector('This test vector intended to detect last zeroized block necessity decision error. For this detection it is 117 bytes.');
+  lDataRow.Rounds                   := 5;
+  lDataRow.AddInputVector('This test vector intended to detect last zeroized block necessity decision error. '+
+                          'For this detection it is 117 bytes.');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '3f2be6dd53dc7944290e8939192bcccc8077c99b622e0c20355942dd6a4ec009';
   lDataRow.ExpectedOutputUTFStrTest := '8a408f644a207606c853c4b297cf4b1b2768e91ab5b8ef6ce7c6a6c2cc1b056e';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 5;
   lDataRow.AddInputVector('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 15625, 1);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '3f2be6dd53dc7944290e8939192bcccc8077c99b622e0c20355942dd6a4ec009';
   lDataRow.ExpectedOutputUTFStrTest := '8a408f644a207606c853c4b297cf4b1b2768e91ab5b8ef6ce7c6a6c2cc1b056e';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 5;
   lDataRow.AddInputVector('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 15625);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '5981d3f8cce7f5674752595f4ad24c184ba1c738c986d4d2eddf2bd86c3f8679';
   lDataRow.ExpectedOutputUTFStrTest := '5981d3f8cce7f5674752595f4ad24c184ba1c738c986d4d2eddf2bd86c3f8679';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 5;
   lDataRow.AddInputVector('');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '166f2218e0994a78ebad3feab0211b612b14e93e5cceb60e6f143df0fa166d39';
   lDataRow.ExpectedOutputUTFStrTest := '8e7ae4af7207e8599142d23d097de42d9f7b5bd314de95261eff46d305834157';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 5;
   lDataRow.AddInputVector('a');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '217bfdf84f5c775596c2f13ceea7417cd4e198d53ca24902f9717585ec5789ac';
   lDataRow.ExpectedOutputUTFStrTest := '45e7e26a86f323b0fe52aecb5a354f683b0685aaf0a99d326baa56117bf60368';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 5;
   lDataRow.AddInputVector('HAVAL');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'a6828eeb82d5a9cbfc7c522ad4b3c38a42753deceb20fb3a6fabc0da8ccd6a1a';
   lDataRow.ExpectedOutputUTFStrTest := '835505ef404be97dde1bcaf354cab1e88282bb2c03bb973ea80dc323033b64d3';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 5;
   lDataRow.AddInputVector('0123456789');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '1a1dc8099bdaa7f35b4da4e805f1a28fee909d8dee920198185cbcaed8a10a8d';
   lDataRow.ExpectedOutputUTFStrTest := '1722c5dc88d77708d4787d283d7e263857e984ae5a6f9a1854963906343abbf8';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 5;
   lDataRow.AddInputVector('ab');
   lDataRow.AddInputVector('cdefghijklmnopqrstuvwxyz');
 
@@ -2655,6 +2982,7 @@ hash value length. }
   lDataRow.ExpectedOutput           := 'c5647fc6c1877fff96742f27e9266b6874894f41a08f5913033d9d532aeddb39';
   lDataRow.ExpectedOutputUTFStrTest := '60811e064a010c9324c386084e7e386dc7371276571d6ba4ff38495ea68cd90c';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 5;
   lDataRow.AddInputVector('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg');
   lDataRow.AddInputVector('hijklmnopqrstuvwxyz012345678');
   lDataRow.AddInputVector('9');
@@ -2663,24 +2991,29 @@ hash value length. }
   lDataRow.ExpectedOutput           := '88c8334686f5ae277de90a2267c7e52ec6e2fe708eedb067d136e046613f2253';
   lDataRow.ExpectedOutputUTFStrTest := 'd4e9a56083f2bf6ec457b646698df7357017c53b58f0732d517796d69d057f53';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 5;
   lDataRow.AddInputVector('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz01234567899876543210', 2);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '7da3e3411ae031fa241e6f2f7deaf62827e8e97a2865ce5c1b67da2b6065efe4';
   lDataRow.ExpectedOutputUTFStrTest := '1dd3aaf5bc03f3674732a28523f57ed24208d283e3836e5900ec8db0833b3f1c';
   lDataRow.PaddingByte              := 128;
-  lDataRow.AddInputVector('This test vector intended to detect last zeroized block necessity decision error. For this detection it is 117 bytes.');
+  lDataRow.Rounds                   := 5;
+  lDataRow.AddInputVector('This test vector intended to detect last zeroized block necessity decision error. '+
+                          'For this detection it is 117 bytes.');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '6d0efcb27421a2c45c14dd66f5de5e289893360ca2089c26ef491c01bd94b21a';
   lDataRow.ExpectedOutputUTFStrTest := 'e42666d73cee62653aecbce6b1bbf76134bf441f8fb04ac7be826bc2493cd537';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 5;
   lDataRow.AddInputVector('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 15625, 1);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '6d0efcb27421a2c45c14dd66f5de5e289893360ca2089c26ef491c01bd94b21a';
   lDataRow.ExpectedOutputUTFStrTest := 'e42666d73cee62653aecbce6b1bbf76134bf441f8fb04ac7be826bc2493cd537';
   lDataRow.PaddingByte              := 128;
+  lDataRow.Rounds                   := 5;
   lDataRow.AddInputVector('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 15625);
 
 end;
@@ -2710,6 +3043,34 @@ begin
   CheckNotEquals(true, FHash.IsPasswordHash);
 end;
 
+procedure TestTHash_Haval256.TestSetRoundsMax;
+var
+  Hash : THash_Haval256;
+begin
+  Hash := FHash as THash_Haval256;
+
+  Hash.Rounds := Hash.GetMinRounds;
+
+  Hash.Rounds := Hash.GetMaxRounds;
+  CheckEquals(5, Hash.Rounds);
+
+  Hash.Rounds := Hash.GetMaxRounds + 1;
+  CheckEquals(5, Hash.Rounds);
+end;
+
+procedure TestTHash_Haval256.TestSetRoundsMin;
+var
+  Hash : THash_Haval256;
+begin
+  Hash := FHash as THash_Haval256;
+
+  Hash.Rounds := Hash.GetMaxRounds;
+  CheckEquals(5, Hash.Rounds);
+
+  Hash.Rounds := Hash.GetMinRounds - 1;
+  CheckEquals(5, Hash.Rounds);
+end;
+
 procedure TestTHash_Haval256.TestBlockSize;
 begin
   CheckEquals(128, FHash.BlockSize);
@@ -2735,18 +3096,21 @@ begin
   lDataRow.ExpectedOutput           := '3293ac630c13f0245f92bbb1766e16167a4e58492dde73f3';
   lDataRow.ExpectedOutputUTFStrTest := '3293ac630c13f0245f92bbb1766e16167a4e58492dde73f3';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '77befbef2e7ef8ab2ec8f93bf587a7fc613e247f5f247809';
   lDataRow.ExpectedOutputUTFStrTest := '5b548919bc71cca542473494052a8fab1b68c62be0f76985';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('a');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '2aab1484e8c158f2bfb8c5ff41b57a525129131c957b5f93';
   lDataRow.ExpectedOutputUTFStrTest := '70198191f5b6e901c884a5e61a8f16ea0ece41969289210e';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('ab');
   lDataRow.AddInputVector('c');
 
@@ -2754,18 +3118,21 @@ begin
   lDataRow.ExpectedOutput           := 'd981f8cb78201a950dcf3048751e441c517fca1aa55a29f6';
   lDataRow.ExpectedOutputUTFStrTest := '5140a79cdf23f824ffb327896283d40e028987c3ae57aa56';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('message digest');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '1714a472eee57d30040412bfcc55032a0b11602ff37beee9';
   lDataRow.ExpectedOutputUTFStrTest := '97fb5aed48239fd2487422f4289ca2774fcc39b1019b6c04';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('abcdefghijklmnopqrstuvwxyz');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '0f7bf9a19b9c58f2b7610df7e84f0ac3a71c631e7b53f78e';
   lDataRow.ExpectedOutputUTFStrTest := '82b6b1126a60eaf0abdb326e31dc3a1559d86c4fe9747fe1';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq');
 
 //  lDataRow := FTestData.AddRow;
@@ -2778,24 +3145,28 @@ begin
   lDataRow.ExpectedOutput           := '1c14795529fd9f207a958f84c52f11e887fa0cabdfd91bfd';
   lDataRow.ExpectedOutputUTFStrTest := 'e329bffcf56e3b751f3b143b31e91da68a9c2e89ef75532b';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('1234567890', 1, 8);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '6db0e2729cbead93d715c6a7d36302e9b3cee0d2bc314b41';
   lDataRow.ExpectedOutputUTFStrTest := '0baf3bbd3bdf40a45b6ede3e4c3d644df75db942bc1f9570';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('a', 1, 1000000);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '5d9ed00a030e638bdb753a6a24fb900e5a63b8e73e6c25b6';
   lDataRow.ExpectedOutputUTFStrTest := 'aabbcca084acecd0511d1f6232a17bfaefa441b2982e5548';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector(#0);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'cdddcacfea7b70b485655ba3dc3f60dee4f6b8f861069e33';
   lDataRow.ExpectedOutputUTFStrTest := '10dd94b66ba6ae0498c9c7754844662e5d8b62e27d2c4d26';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector(#0, 24, 1);
   // SourceEnd
 
@@ -2803,12 +3174,14 @@ begin
   lDataRow.ExpectedOutput           := 'dd00230799f5009fec6debc838bb6a27df2b9d6f110c7937';
   lDataRow.ExpectedOutputUTFStrTest := '54d1b0b346b9597343ff5a43d89a99c35f1066cff8fb9d52';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('Tiger');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'f71c8583902afb879edfe610f82c0d4786a3a534504486b5';
   lDataRow.ExpectedOutputUTFStrTest := '7ff195ad4fcbd943fc12c42064f342ceb8dac80c21ba170f';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg');
   lDataRow.AddInputVector('h');
   lDataRow.AddInputVector('ijklmnopqrstuvwxyz0123456789+-');
@@ -2817,6 +3190,7 @@ begin
   lDataRow.ExpectedOutput           := '48ceeb6308b87d46e95d656112cdf18d97915f9765658957';
   lDataRow.ExpectedOutputUTFStrTest := 'e18bc4cd6b28b29012a93f02f03ce3db027b2c5a7a17e9a2';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('ABCDEFGHIJKLMNOPQRSTUVWXYZ=abcdefghijklmnopqrstuvwxyz+012345678');
   lDataRow.AddInputVector('9');
 
@@ -2824,26 +3198,507 @@ begin
   lDataRow.ExpectedOutput           := '8a866829040a410c729ad23f5ada711603b3cdd357e4c15e';
   lDataRow.ExpectedOutputUTFStrTest := 'ec87318e83e4e0a3a449430f2090ff8312d1977ef8fc0b19';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('Tiger - A Fast New Hash Function, by Ross Anderson and Eli Biham');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'ce55a6afd591f5ebac547ff84f89227f9331dab0b611c889';
   lDataRow.ExpectedOutputUTFStrTest := '2a9c054f26080de941ac3a7853b0c9ff80f99b03510c1860';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('Tiger - A Fast New Hash Function, by Ross Anderson and Eli Biham, proceedings of Fast Software Encryption 3, Cambridge.');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '631abdd103eb9a3d245b6dfd4d77b257fc7439501d1568dd';
   lDataRow.ExpectedOutputUTFStrTest := '7fe631245eafd0a6fb2473c83a58a244ae60ea475880106b';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('Tiger - A Fast New Hash Function, by Ross Anderson and Eli Biham, proceedings of Fast Software Encryption 3, Cambridge, 1996.');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'c54034e5b43eb8005848a7e0ae6aac76e4ff590ae715fd25';
   lDataRow.ExpectedOutputUTFStrTest := '9decaa95dac2e5d11617989563ad8c94d3236809e023ff59';
   lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
   lDataRow.AddInputVector('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-', 2);
 
+  // Self generated variants with different rounds
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '24cc78a7f6ff3546e7984e59695ca13d804e0b686e255194';
+  lDataRow.ExpectedOutputUTFStrTest := '24cc78a7f6ff3546e7984e59695ca13d804e0b686e255194';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'e2a0e5e38b778421cceafbfe9a37068b032093fd36be1635';
+  lDataRow.ExpectedOutputUTFStrTest := 'ec116d1f4ef6f2144f63c70d2015bb3b0d59bda68733730d';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'e765ebe4c351724a1b99f96f2d7e62c9aacbe64c63b5bca2';
+  lDataRow.ExpectedOutputUTFStrTest := 'e765ebe4c351724a1b99f96f2d7e62c9aacbe64c63b5bca2';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 5;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '2746bc7889f68e8758257f2bc169be674d51608ce9dd65ed';
+  lDataRow.ExpectedOutputUTFStrTest := 'd20a060f563803b54faa0922bd86a8719ec1df50754d678c';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 5;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '6e30eae3390e2ca9335c9edfc90dc0f003eabad50918d9aa';
+  lDataRow.ExpectedOutputUTFStrTest := '6e30eae3390e2ca9335c9edfc90dc0f003eabad50918d9aa';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 6;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'bac32bc28a54f6d5ee26c85c7ae1ef61e5aad407cbf9a910';
+  lDataRow.ExpectedOutputUTFStrTest := 'adf49bb1a1a141a9edc4bfd2f111d6316b71ff2f1d141679';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 6;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '5337e218c7c12b1192fa10e5c63ed907af57bbd6d6146364';
+  lDataRow.ExpectedOutputUTFStrTest := '5337e218c7c12b1192fa10e5c63ed907af57bbd6d6146364';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 7;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'df00ed0cfb9869be78a8cc6a58ba2c6dd8b012c1da3cc05e';
+  lDataRow.ExpectedOutputUTFStrTest := '89b75dd95a5bf325c2ef7f3e9c9dab1b15f49ebfa567114a';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 7;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '822f272cb53c4186d4505dcea630813bc7e8fa9a92f573af';
+  lDataRow.ExpectedOutputUTFStrTest := '822f272cb53c4186d4505dcea630813bc7e8fa9a92f573af';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 8;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '4dce897c0aa41ed657ee3f124ece4ed22a433f53efba644d';
+  lDataRow.ExpectedOutputUTFStrTest := 'ffe1544dfa924e8ece12417d10f738e98ab3dee135457bfd';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 8;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '6cb2bc4ea50b592974add8aa516a30ba896fe7e1bc9c648b';
+  lDataRow.ExpectedOutputUTFStrTest := '6cb2bc4ea50b592974add8aa516a30ba896fe7e1bc9c648b';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 9;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '5401b91084bc1ebe1c1408d1989d3bbbec84e8e169920ded';
+  lDataRow.ExpectedOutputUTFStrTest := '5a7a8551fd0a05e3d63d7fad19731be01a2a10cc52e47005';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 9;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'ae19918f80fbbe6652da052a8156b2496482f0b0c5b939fb';
+  lDataRow.ExpectedOutputUTFStrTest := 'ae19918f80fbbe6652da052a8156b2496482f0b0c5b939fb';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 10;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'd4a80f966934a195dca058d40add105aab6be6500120df51';
+  lDataRow.ExpectedOutputUTFStrTest := '288406055986df8cfa45e4383cfbe6c2dd0d8abc67c65328';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 10;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '3ef6398161c991e08630cc02dabad92eb13ac606a8eb3d84';
+  lDataRow.ExpectedOutputUTFStrTest := '3ef6398161c991e08630cc02dabad92eb13ac606a8eb3d84';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 11;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '75b4189ca752900826fe20ff9e353e71a09e5a737cca7d90';
+  lDataRow.ExpectedOutputUTFStrTest := '7bda1f993777792cd0cda887fd6c2ee114f6c842e5d817b2';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 11;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'd7ce83e7cc79f07337f320378232306f37f7842246555ccd';
+  lDataRow.ExpectedOutputUTFStrTest := 'd7ce83e7cc79f07337f320378232306f37f7842246555ccd';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 12;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '4ac77d8fca06eb2544a5c975d9d9c8ab9b878bd30ecdeba8';
+  lDataRow.ExpectedOutputUTFStrTest := '5081fea9760d2ffa89b6e04a03992bb874b5cf87e2ffd76a';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 12;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'aa49870819c7b4d567b4e9b5885f3fac4d65cf35cae6dda8';
+  lDataRow.ExpectedOutputUTFStrTest := 'aa49870819c7b4d567b4e9b5885f3fac4d65cf35cae6dda8';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 13;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'cd3f61c7c6272bc8e74e5e682d9d2564b7602fa0064d1135';
+  lDataRow.ExpectedOutputUTFStrTest := '653329776b1ae6324d54ad32711cb52de6ba25317ee388dd';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 13;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '2b9aa826bef18c29206f6a07fd89d085cb4511f8fe45879c';
+  lDataRow.ExpectedOutputUTFStrTest := '2b9aa826bef18c29206f6a07fd89d085cb4511f8fe45879c';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 14;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '554de6c8981aa6fcca22228898e4ae6f7c41cc7da3dcae2f';
+  lDataRow.ExpectedOutputUTFStrTest := 'de9c211c6961a18ee78e03488b847d6715dc4dabd5b07307';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 14;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'a0d3f6e1e4976828739e407845f06c7ca773ebdccf669c60';
+  lDataRow.ExpectedOutputUTFStrTest := 'a0d3f6e1e4976828739e407845f06c7ca773ebdccf669c60';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 15;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '811b1fd5420f2e5a97dcb459fd381df617dacda430fc8508';
+  lDataRow.ExpectedOutputUTFStrTest := 'a052c9bee462109367b096618b1cbf1f0ae1b01d82f85ba8';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 15;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '6df4fdcd38811963c513247392df382f48f8e4849f7f3ad6';
+  lDataRow.ExpectedOutputUTFStrTest := '6df4fdcd38811963c513247392df382f48f8e4849f7f3ad6';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 16;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '6fb82ee580cfd5798c821884f4629f5799f8146c23f065c9';
+  lDataRow.ExpectedOutputUTFStrTest := '8f0485953651d92d37fb25db1e443fe70583e43e7fcb216e';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 16;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '3590dee8092a56bddf46b909b5590c36558375089da934ec';
+  lDataRow.ExpectedOutputUTFStrTest := '3590dee8092a56bddf46b909b5590c36558375089da934ec';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 17;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '5d0f97e9c3acebf3311b3398547e4e725a53c77f809c911e';
+  lDataRow.ExpectedOutputUTFStrTest := '6a3e2c5d326be12e0830c9e8861bee4f1d56f6e1120baa30';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 17;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '378017ad963f7ec7e6552a22e641f61ac7d343cae8c31514';
+  lDataRow.ExpectedOutputUTFStrTest := '378017ad963f7ec7e6552a22e641f61ac7d343cae8c31514';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 18;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'd239e4a37807dcc0a4692a67c1580d8c59f8f4a495e0c6ca';
+  lDataRow.ExpectedOutputUTFStrTest := '961ec7a879f589043376a06abc33650f01078247be379549';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 18;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '7f13cf1981b5d6604643de88f2b6c93fa9cb3ea121eb3961';
+  lDataRow.ExpectedOutputUTFStrTest := '7f13cf1981b5d6604643de88f2b6c93fa9cb3ea121eb3961';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 19;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'fe86e525a5a233efb1178d9f1079acdb7bfd0b6c70c7f334';
+  lDataRow.ExpectedOutputUTFStrTest := '3c65ee980663a446748671dd27871eada8dce99767efa464';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 19;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '7b2e8ccd1cf6d82ee2d69fc934e74390c9b4589afe3cb793';
+  lDataRow.ExpectedOutputUTFStrTest := '7b2e8ccd1cf6d82ee2d69fc934e74390c9b4589afe3cb793';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 20;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '9eec3a05c9ed678507c35b296459953b1ce169e5244ebbcd';
+  lDataRow.ExpectedOutputUTFStrTest := 'e9872f3ec69dc75b0d3ccf4787d2aa83be1adceeb9844093';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 20;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'cb2b89a152fb416cc2943e770370216f24144608019b8fe7';
+  lDataRow.ExpectedOutputUTFStrTest := 'cb2b89a152fb416cc2943e770370216f24144608019b8fe7';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 21;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '6696a9c4d654f489fcf9a2a0b047df351dfd028028d63d20';
+  lDataRow.ExpectedOutputUTFStrTest := '7f66bb24ac9763f39f1fb847febf52ab643a44f00b3c30c3';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 21;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'd1df075117578d38710b1b98dd46e4bc952ffc415e975048';
+  lDataRow.ExpectedOutputUTFStrTest := 'd1df075117578d38710b1b98dd46e4bc952ffc415e975048';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 22;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '5e63ed6c5f96f1907ba452806d2e0a33084e53053c074aa1';
+  lDataRow.ExpectedOutputUTFStrTest := 'f436db9086feccd6a5ebe01d2581c8065e1b721de69abdd7';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 22;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'e0c437f0f012902417648e358c6f7a669d8a7b88d9f9e2fc';
+  lDataRow.ExpectedOutputUTFStrTest := 'e0c437f0f012902417648e358c6f7a669d8a7b88d9f9e2fc';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 23;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '91b7092e164503fdbb2116662f622c5cccd94b4b5219f469';
+  lDataRow.ExpectedOutputUTFStrTest := 'd52f0fbfc468304d2f988909a2d9a43fe64d2d1687dfc035';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 23;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '56336fd45156895ca48e40533133895a14562ce619283bfa';
+  lDataRow.ExpectedOutputUTFStrTest := '56336fd45156895ca48e40533133895a14562ce619283bfa';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 24;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '6b3c998afe86cdded92c057cba80d86953f4ac0a17ee8087';
+  lDataRow.ExpectedOutputUTFStrTest := '61fe1d0ac706642d076d39b26476cef08fe6c7cf21ea651d';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 24;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'eae6f455e444669a9bb6f3a90f2c82108360e189fd203225';
+  lDataRow.ExpectedOutputUTFStrTest := 'eae6f455e444669a9bb6f3a90f2c82108360e189fd203225';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 25;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'f8f83cca45b25b0f24848c3f6d3d369c97db26b3194032d7';
+  lDataRow.ExpectedOutputUTFStrTest := 'd5bb048fec29eb17e175a4cea767d8b236a1e46a2f91bf55';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 25;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'c8692da2f95b4ab0fd998dc7bda63a3df6691c0ceab07a51';
+  lDataRow.ExpectedOutputUTFStrTest := 'c8692da2f95b4ab0fd998dc7bda63a3df6691c0ceab07a51';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 26;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'aaf3170253c30162910f4c1d0434722766fbcad5d2307a26';
+  lDataRow.ExpectedOutputUTFStrTest := 'a1c24ee10c883666fb870b9a336db091d3379f736a8990ad';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 26;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'ff43bbe31a569aa50c1926ae64afcdf0cdef0f4e98bbd2fc';
+  lDataRow.ExpectedOutputUTFStrTest := 'ff43bbe31a569aa50c1926ae64afcdf0cdef0f4e98bbd2fc';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 27;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '1a727cd9a0b13a838afc05c83f8826e0fd93383dd68030f3';
+  lDataRow.ExpectedOutputUTFStrTest := 'e70606ca75db27708fe0ebde144715b9e6d25f05dcb84707';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 27;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '4294ea0175517264aa3a6a7a33aa1a3814fa5f210a5dba39';
+  lDataRow.ExpectedOutputUTFStrTest := '4294ea0175517264aa3a6a7a33aa1a3814fa5f210a5dba39';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 28;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'f07d8af15589538b8524210dd605720edca25c2cf905f282';
+  lDataRow.ExpectedOutputUTFStrTest := '65929f1afe61804fa542f8096c026e1273df6836db26fbde';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 28;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '73bab93d5e8e858c13851f3786d7d493e95a7eac1478bc2e';
+  lDataRow.ExpectedOutputUTFStrTest := '73bab93d5e8e858c13851f3786d7d493e95a7eac1478bc2e';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 29;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '0643496a5a2dd9efa5d15352effd32298627ca33e90e870f';
+  lDataRow.ExpectedOutputUTFStrTest := 'f7c634766d127281a1e2ef90a61d5bde3aab60abd7be4f8f';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 29;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '1b688d42ea04d2ee32c1728c1f621a5cdfa2690dea1bf38a';
+  lDataRow.ExpectedOutputUTFStrTest := '1b688d42ea04d2ee32c1728c1f621a5cdfa2690dea1bf38a';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 30;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '979bdfa0be86a13c4ee3a15ba0a38d3fe1c155fdf2205857';
+  lDataRow.ExpectedOutputUTFStrTest := '962cf23bf3414f10f31233b19e2f9b3c5125af5bb37c144f';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 30;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'ceea19a35a869e6ea59de7f4f66e28617640d1e5f55249ef';
+  lDataRow.ExpectedOutputUTFStrTest := 'ceea19a35a869e6ea59de7f4f66e28617640d1e5f55249ef';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 31;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '4bc7ad215c17c5da762a4436479892aeb5f902ec5a5e4d7c';
+  lDataRow.ExpectedOutputUTFStrTest := 'fad8b8470dca2659b59e11dd388209f3cc1255a36012608f';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 31;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '0c6ceaa3aa1841f0031963141877417a9c16f44c199dd81e';
+  lDataRow.ExpectedOutputUTFStrTest := '0c6ceaa3aa1841f0031963141877417a9c16f44c199dd81e';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 32;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '5bbdf3a8e25ab4642dd047a59191134d972ff29d49cbfd07';
+  lDataRow.ExpectedOutputUTFStrTest := '0c10a27c600377c13a932f0c8ea096b6f0b1d804d75847d3';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 32;
+  lDataRow.AddInputVector('a');
+
+  // Tests from former Tiger4Rounds test class which got merged in here after providing the
+  // ability to specify the number of rounds in the test data
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '24cc78a7f6ff3546e7984e59695ca13d804e0b686e255194';
+  lDataRow.ExpectedOutputUTFStrTest := '24cc78a7f6ff3546e7984e59695ca13d804e0b686e255194';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '538883c8fc5f28250299018e66bdf4fdb5ef7b65f2e91753';
+  lDataRow.ExpectedOutputUTFStrTest := '8deb34e6f352e6b27c40be290f56f8db678022bbfb14913a';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
+  lDataRow.AddInputVector('ab');
+  lDataRow.AddInputVector('c');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'aee020507279c0d2defcb767251cc0f824bbe38569d58ee4';
+  lDataRow.ExpectedOutputUTFStrTest := '986161d6e753840ad58b8185244fe8ed76fcb282d51ec308';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
+  lDataRow.AddInputVector('Tiger');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '439c699b3ca4f2d0cedc940fabca8941932a729a91950710';
+  lDataRow.ExpectedOutputUTFStrTest := '8e776732af42a346f43809feb0eefdf5f7cc031347b1fb04';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
+  lDataRow.AddInputVector('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg');
+  lDataRow.AddInputVector('h');
+  lDataRow.AddInputVector('ijklmnopqrstuvwxyz0123456789+-');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'c5fe245ba8e9e3a056efd9f6cfa79cead8571a3c87fe62f1';
+  lDataRow.ExpectedOutputUTFStrTest := '97bea30a65fea188ceff63018a806c71a251f3d57c81eac6';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
+  lDataRow.AddInputVector('ABCDEFGHIJKLMNOPQRSTUVWXYZ=abcdefghijklmnopqrstuvwxyz+012345678');
+  lDataRow.AddInputVector('9');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '81100cdf2076b0e0392004f703449f41a37b840437b643ff';
+  lDataRow.ExpectedOutputUTFStrTest := 'f637088a5036d9c5eb1b8f0624e63063a20cf6b2b646ae56';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
+  lDataRow.AddInputVector('Tiger - A Fast New Hash Function, by Ross Anderson and Eli Biham');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'a1e027aa525a38589ac97cfa325dc08417b3445ab3c27452';
+  lDataRow.ExpectedOutputUTFStrTest := '15bdac6f9d89b892f55f111a7f74cbcad6f9ff16ded07717';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
+  lDataRow.AddInputVector('Tiger - A Fast New Hash Function, by Ross Anderson and Eli Biham, '+
+                          'proceedings of Fast Software Encryption 3, Cambridge.');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'f72ca9fa0db3332782d7b8ccac29575490b8100803212003';
+  lDataRow.ExpectedOutputUTFStrTest := '7d8fa74429c8d0010df6015816638891d52e301ec1756b72';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
+  lDataRow.AddInputVector('Tiger - A Fast New Hash Function, by Ross Anderson and Eli Biham, '+
+                          'proceedings of Fast Software Encryption 3, Cambridge, 1996.');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '653b3075f1a85c6c74f1a9090b3c46239f29f0f92358e4e3';
+  lDataRow.ExpectedOutputUTFStrTest := '21073aaf37e4a7bb0ccdaed0705a188f0c19c01f5c8bf7ce';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
+  lDataRow.AddInputVector('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-', 2);
 end;
 
 procedure TestTHash_Tiger_3Rounds.TestDigestSize;
@@ -2877,6 +3732,32 @@ begin
   CheckEquals(3, THash_Tiger(FHash).Rounds);
 end;
 
+procedure TestTHash_Tiger_3Rounds.TestSetRoundsMax;
+var
+  Hash : THash_Tiger;
+begin
+  Hash := FHash as THash_Tiger;
+
+  Hash.Rounds := Hash.GetMinRounds;
+  CheckEquals(3, Hash.Rounds);
+
+  Hash.Rounds := Hash.GetMaxRounds + 1;
+  CheckEquals(32, Hash.Rounds);
+end;
+
+procedure TestTHash_Tiger_3Rounds.TestSetRoundsMin;
+var
+  Hash : THash_Tiger;
+begin
+  Hash := FHash as THash_Tiger;
+
+  Hash.Rounds := Hash.GetMaxRounds;
+  CheckEquals(32, Hash.Rounds);
+
+  Hash.Rounds := Hash.GetMinRounds - 1;
+  CheckEquals(3, Hash.Rounds);
+end;
+
 procedure TestTHash_Tiger_3Rounds.TestSetRoundsUpperLimit;
 begin
   THash_Tiger(FHash).Rounds := 33;
@@ -2895,112 +3776,6 @@ begin
 end;
 
 procedure TestTHash_Tiger_3Rounds.TestClassByName;
-begin
-  DoTestClassByName('THash_Tiger', THash_Tiger);
-end;
-
-procedure TestTHash_Tiger_4Rounds.SetUp;
-var lDataRow:IHashTestDataRowSetup;
-begin
-  inherited;
-
-  FHash        := THash_Tiger.Create;
-  THash_Tiger(FHash).Rounds := 4;
-
-  lDataRow := FTestData.AddRow;
-  lDataRow.ExpectedOutput           := '24cc78a7f6ff3546e7984e59695ca13d804e0b686e255194';
-  lDataRow.ExpectedOutputUTFStrTest := '24cc78a7f6ff3546e7984e59695ca13d804e0b686e255194';
-  lDataRow.PaddingByte              := 1;
-  lDataRow.AddInputVector('');
-
-  lDataRow := FTestData.AddRow;
-  lDataRow.ExpectedOutput           := '538883c8fc5f28250299018e66bdf4fdb5ef7b65f2e91753';
-  lDataRow.ExpectedOutputUTFStrTest := '8deb34e6f352e6b27c40be290f56f8db678022bbfb14913a';
-  lDataRow.PaddingByte              := 1;
-  lDataRow.AddInputVector('ab');
-  lDataRow.AddInputVector('c');
-
-  lDataRow := FTestData.AddRow;
-  lDataRow.ExpectedOutput           := 'aee020507279c0d2defcb767251cc0f824bbe38569d58ee4';
-  lDataRow.ExpectedOutputUTFStrTest := '986161d6e753840ad58b8185244fe8ed76fcb282d51ec308';
-  lDataRow.PaddingByte              := 1;
-  lDataRow.AddInputVector('Tiger');
-
-  lDataRow := FTestData.AddRow;
-  lDataRow.ExpectedOutput           := '439c699b3ca4f2d0cedc940fabca8941932a729a91950710';
-  lDataRow.ExpectedOutputUTFStrTest := '8e776732af42a346f43809feb0eefdf5f7cc031347b1fb04';
-  lDataRow.PaddingByte              := 1;
-  lDataRow.AddInputVector('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg');
-  lDataRow.AddInputVector('h');
-  lDataRow.AddInputVector('ijklmnopqrstuvwxyz0123456789+-');
-
-  lDataRow := FTestData.AddRow;
-  lDataRow.ExpectedOutput           := 'c5fe245ba8e9e3a056efd9f6cfa79cead8571a3c87fe62f1';
-  lDataRow.ExpectedOutputUTFStrTest := '97bea30a65fea188ceff63018a806c71a251f3d57c81eac6';
-  lDataRow.PaddingByte              := 1;
-  lDataRow.AddInputVector('ABCDEFGHIJKLMNOPQRSTUVWXYZ=abcdefghijklmnopqrstuvwxyz+012345678');
-  lDataRow.AddInputVector('9');
-
-  lDataRow := FTestData.AddRow;
-  lDataRow.ExpectedOutput           := '81100cdf2076b0e0392004f703449f41a37b840437b643ff';
-  lDataRow.ExpectedOutputUTFStrTest := 'f637088a5036d9c5eb1b8f0624e63063a20cf6b2b646ae56';
-  lDataRow.PaddingByte              := 1;
-  lDataRow.AddInputVector('Tiger - A Fast New Hash Function, by Ross Anderson and Eli Biham');
-
-  lDataRow := FTestData.AddRow;
-  lDataRow.ExpectedOutput           := 'a1e027aa525a38589ac97cfa325dc08417b3445ab3c27452';
-  lDataRow.ExpectedOutputUTFStrTest := '15bdac6f9d89b892f55f111a7f74cbcad6f9ff16ded07717';
-  lDataRow.PaddingByte              := 1;
-  lDataRow.AddInputVector('Tiger - A Fast New Hash Function, by Ross Anderson and Eli Biham, proceedings of Fast Software Encryption 3, Cambridge.');
-
-  lDataRow := FTestData.AddRow;
-  lDataRow.ExpectedOutput           := 'f72ca9fa0db3332782d7b8ccac29575490b8100803212003';
-  lDataRow.ExpectedOutputUTFStrTest := '7d8fa74429c8d0010df6015816638891d52e301ec1756b72';
-  lDataRow.PaddingByte              := 1;
-  lDataRow.AddInputVector('Tiger - A Fast New Hash Function, by Ross Anderson and Eli Biham, proceedings of Fast Software Encryption 3, Cambridge, 1996.');
-
-  lDataRow := FTestData.AddRow;
-  lDataRow.ExpectedOutput           := '653b3075f1a85c6c74f1a9090b3c46239f29f0f92358e4e3';
-  lDataRow.ExpectedOutputUTFStrTest := '21073aaf37e4a7bb0ccdaed0705a188f0c19c01f5c8bf7ce';
-  lDataRow.PaddingByte              := 1;
-  lDataRow.AddInputVector('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-', 2);
-
-end;
-
-procedure TestTHash_Tiger_4Rounds.TestSetRoundsLowerLimit;
-begin
-  THash_Tiger(FHash).Rounds := 2;
-  CheckEquals(3, THash_Tiger(FHash).Rounds);
-end;
-
-procedure TestTHash_Tiger_4Rounds.TestSetRoundsUpperLimit;
-begin
-  THash_Tiger(FHash).Rounds := 33;
-  CheckEquals(32, THash_Tiger(FHash).Rounds);
-end;
-
-procedure TestTHash_Tiger_4Rounds.TestSetRounds;
-begin
-  THash_Tiger(FHash).Rounds := 5;
-  CheckEquals(5, THash_Tiger(FHash).Rounds);
-end;
-
-procedure TestTHash_Tiger_4Rounds.TestDigestSize;
-begin
-  CheckEquals(24, FHash.DigestSize);
-end;
-
-procedure TestTHash_Tiger_4Rounds.TestIsPasswordHash;
-begin
-  CheckNotEquals(true, FHash.IsPasswordHash);
-end;
-
-procedure TestTHash_Tiger_4Rounds.TestBlockSize;
-begin
-  CheckEquals(64, FHash.BlockSize);
-end;
-
-procedure TestTHash_Tiger_4Rounds.TestClassByName;
 begin
   DoTestClassByName('THash_Tiger', THash_Tiger);
 end;
@@ -3700,91 +4475,199 @@ begin
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '8617f366566a011837f4fb4ba5bedea2';
   lDataRow.ExpectedOutputUTFStrTest := '8617f366566a011837f4fb4ba5bedea2';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('');
 
   // Source until SourceEnd: http://ftp.vim.org/security/coast/crypto/snefru/snefru.c
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'd9fcb3171c097fbba8c8f12aa0906bad';
   lDataRow.ExpectedOutputUTFStrTest := 'ab3974fcd9f1caa6a2ae226c2974fb0c';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector(#$0A);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '44ec420ce99c1f62feb66c53c24ae453';
   lDataRow.ExpectedOutputUTFStrTest := '39deead469aec32c2ce66aebb7ec3eec';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('1'#$0A);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '7182051aa852ef6fba4b6c9c9b79b317';
   lDataRow.ExpectedOutputUTFStrTest := '3e34c975f5308c71523b3fc39a3692e6';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('12'#$0A);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'bc3a50af82bf56d6a64732bc7b050a93';
   lDataRow.ExpectedOutputUTFStrTest := 'e71945a2fcd0f0d992b5d24b6a49547f';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('123'#$0A);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'c5b8a04985a8eadfb4331a8988752b77';
   lDataRow.ExpectedOutputUTFStrTest := 'ad32e4eb4cbf5c482194596f28902240';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('1234'#$0A);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'd559a2b62f6f44111324f85208723707';
   lDataRow.ExpectedOutputUTFStrTest := 'a8b025b7cddd0555b9241dcf16fbd798';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('12345'#$0A);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '6cfb5e8f1da02bd167b01e4816686c30';
   lDataRow.ExpectedOutputUTFStrTest := '73b7248a11bbb8425863eec60e5d8a43';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('123456'#$0A);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '29aa48325f275a8a7a01ba1543c54ba5';
   lDataRow.ExpectedOutputUTFStrTest := 'd5c92cb71197ee91fd4f347b8fbac655';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('1234567'#$0A);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'be862a6b68b7df887ebe00319cbc4a47';
   lDataRow.ExpectedOutputUTFStrTest := '8b7b3408b144335774eb6c276ded6e00';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('12345678'#$0A);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '6103721ccd8ad565d68e90b0f8906163';
   lDataRow.ExpectedOutputUTFStrTest := '1a624aa607071a337558911531a0dde6';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('123456789'#$0A);
   // SourceEnd
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '553d0648928299a0f22a275a02c83b10';
   lDataRow.ExpectedOutputUTFStrTest := '94f3567822b3fe5299c0e109dff4fa70';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('abc');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '7840148a66b91c219c36f127a0929606';
   lDataRow.ExpectedOutputUTFStrTest := '9823d5f81402ac45b790633af492097b';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('abcdefghijklm');
   lDataRow.AddInputVector('nopqrstuvwxyz');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'd9204ed80bb8430c0b9c244fe485814a';
   lDataRow.ExpectedOutputUTFStrTest := '9a92c0b5e89851f4a5faaa441c250931';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('1234567890', 8);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'dd0d1ab288c3c36671044f41c5077ad6';
   lDataRow.ExpectedOutputUTFStrTest := '150c6230252f8497c64f6ccff97928f8';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('Test message for buffer workflow test(47 bytes)');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'e7054f05bd72d7e86a052153a17c741d';
   lDataRow.ExpectedOutputUTFStrTest := '3ab419c9af627272b2e2cdafed2b7150';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('Test message for buffer workflow test(48 bytes).');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '9b34204833422df13c83e10a0c6d080a';
   lDataRow.ExpectedOutputUTFStrTest := '906816013ee57f3d2ae1562b9590d82f';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('Test message for buffer workflow test(49 bytes)..');
 
+  // Self generated variants with different rounds
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'b67224738c99d0ef185f2e971eb762ae';
+  lDataRow.ExpectedOutputUTFStrTest := 'b67224738c99d0ef185f2e971eb762ae';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 2;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '539c64ded2a44b97ed4f0711004edaad';
+  lDataRow.ExpectedOutputUTFStrTest := 'fc6f9f482b0d0723ffed58fc82d90ecc';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 2;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '9aeac4d3d3e296ad4e566c6e2811b85a';
+  lDataRow.ExpectedOutputUTFStrTest := '9aeac4d3d3e296ad4e566c6e2811b85a';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '7e1f7a00983fa324168f780929a0c4c7';
+  lDataRow.ExpectedOutputUTFStrTest := 'cc882f105b7e399c2a632c0501a8af05';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '5148516ae7fc7e89ad8e0b0b8d76ac78';
+  lDataRow.ExpectedOutputUTFStrTest := '5148516ae7fc7e89ad8e0b0b8d76ac78';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '5e805ed80354e9691a1b2efde15e912f';
+  lDataRow.ExpectedOutputUTFStrTest := '705ec2a3cfe525d6ffc11c9954515e86';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '5ba0047e7d6cbdfbff10fad5490c6d38';
+  lDataRow.ExpectedOutputUTFStrTest := '5ba0047e7d6cbdfbff10fad5490c6d38';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 5;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'b7eab52063997cf0f9af9b48f40ef4de';
+  lDataRow.ExpectedOutputUTFStrTest := '2e4841da4f75eb194700b917fd47dc7a';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 5;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '121baa1ecd1a1142c12d26a1bb775b65';
+  lDataRow.ExpectedOutputUTFStrTest := '121baa1ecd1a1142c12d26a1bb775b65';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 6;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '27d8e5aa9b80f028e7584b4288c981d5';
+  lDataRow.ExpectedOutputUTFStrTest := '5988c4849fb285c4c47ef5d9202b0f8f';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 6;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '07c8fa1b2d6fd256721f5d9a32ae5d65';
+  lDataRow.ExpectedOutputUTFStrTest := '07c8fa1b2d6fd256721f5d9a32ae5d65';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 7;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '527a095ba679879a79d443a07d3772b9';
+  lDataRow.ExpectedOutputUTFStrTest := 'b2792fb5beb5060e96fdebd5e564e5be';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 7;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'bf5ce540ae51bc50399f96746c5a15bd';
+  lDataRow.ExpectedOutputUTFStrTest := 'ac49ea6c1b5f4191c2fdfbab7e87c141';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 8;
+  lDataRow.AddInputVector('a');
 end;
 
 procedure TestTHash_Snefru128.TestDigestSize;
@@ -3812,6 +4695,44 @@ begin
   CheckNotEquals(true, FHash.IsPasswordHash);
 end;
 
+procedure TestTHash_Snefru128.TestSetRoundsMax;
+var
+  Hash : THash_Snefru128;
+begin
+  Hash := FHash as THash_Snefru128;
+
+  Hash.Rounds := Hash.GetMinRounds;
+  CheckEquals(2, Hash.Rounds);
+
+  Hash.Rounds := Hash.GetMaxRounds;
+  CheckEquals(8, Hash.Rounds);
+
+  Hash.Rounds := 3;
+  CheckEquals(3, Hash.Rounds);
+
+  Hash.Rounds := Hash.GetMaxRounds + 1;
+  CheckEquals(8, Hash.Rounds);
+end;
+
+procedure TestTHash_Snefru128.TestSetRoundsMin;
+var
+  Hash : THash_Snefru128;
+begin
+  Hash := FHash as THash_Snefru128;
+
+  Hash.Rounds := Hash.GetMaxRounds;
+  CheckEquals(8, Hash.Rounds);
+
+  Hash.Rounds := Hash.GetMinRounds;
+  CheckEquals(2, Hash.Rounds);
+
+  Hash.Rounds := 3;
+  CheckEquals(3, Hash.Rounds);
+
+  Hash.Rounds := Hash.GetMinRounds - 1;
+  CheckEquals(8, Hash.Rounds);
+end;
+
 procedure TestTHash_Snefru128.TestBlockSize;
 begin
   CheckEquals(48, FHash.BlockSize);
@@ -3832,76 +4753,181 @@ begin
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '8617f366566a011837f4fb4ba5bedea2b892f3ed8b894023d16ae344b2be5881';
   lDataRow.ExpectedOutputUTFStrTest := '8617f366566a011837f4fb4ba5bedea2b892f3ed8b894023d16ae344b2be5881';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('');
 
   // Source until SourceEnd: http://ftp.vim.org/security/coast/crypto/snefru/snefru.c
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '2e02687f0d45d5b9b50cb68c3f33e6843d618a1aca2d06893d3eb4e3026b5732';
   lDataRow.ExpectedOutputUTFStrTest := 'ea81f0d664c9f14b5af04103212ea129001da9c3c421b6e340bdb9ece6c90244';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector(#$0A);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'bfea4a05a2a2ef15c736d114598a20b9d9bd4d66b661e6b05ecf6a7737bdc58c';
   lDataRow.ExpectedOutputUTFStrTest := 'd26379b028a12a8f8f1b04396a1907ff61e70bf9184c32ebfb254c4e15138762';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('1'#$0A);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'ac677d69761ade3f189c7aef106d5fe7392d324e19cc76d5db4a2c05f2cc2cc5';
   lDataRow.ExpectedOutputUTFStrTest := 'f3530df84977152b8a38867acf14c9a46cfae162f9543c986a500cf32d5a7359';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('12'#$0A);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '061c76aa1db4a22c0e42945e26c48499b5400162e08c640be05d3c007c44793d';
   lDataRow.ExpectedOutputUTFStrTest := '25987aee97eeee4d4e3914e8245ecdfe69e45cbe0e728175cb4411e046091fd4';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('123'#$0A);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '1e87fe1d9c927e9e24be85e3cc73359873541640a6261793ce5a974953113f5e';
   lDataRow.ExpectedOutputUTFStrTest := 'b76fbfabada71bf38decdd3b4e19ec39292a496dd23c29755c4a96caf77d4b13';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('1234'#$0A);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '1b59927d85a9349a87796620fe2ff401a06a7ba48794498ebab978efc3a68912';
   lDataRow.ExpectedOutputUTFStrTest := '6598676a170cf7075cee8b54da5844a824c0e1cb9830773ba9728ca2c65f7fe5';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('12345'#$0A);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '28e9d9bc35032b68faeda88101ecb2524317e9da111b0e3e7094107212d9cf72';
   lDataRow.ExpectedOutputUTFStrTest := '062cc2b932500825575447e87a9416f38d561b0b3111b36011a9e6ef773cf54b';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('123456'#$0A);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'f7fff4ee74fd1b8d6b3267f84e47e007f029d13b8af7e37e34d13b469b8f248f';
   lDataRow.ExpectedOutputUTFStrTest := '45b05d5126783c33b68f9a813cb3010f84cc9c1d6b133391a88ae61b43c89cc5';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('1234567'#$0A);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'ee7d64b0102b2205e98926613b200185559d08be6ad787da717c968744e11af3';
   lDataRow.ExpectedOutputUTFStrTest := '9e614b25cd9d6b260c2fdeb59b1d6de8e8329157aa581a9f63424b4c012bd0df';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('12345678'#$0A);
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '4ca72639e40e9ab9c0c3f523c4449b3911632d374c124d7702192ec2e4e0b7a3';
   lDataRow.ExpectedOutputUTFStrTest := '7dde03a5c268df01f5cdc408dc1807a677954e6aaf9ad0d6235809b758ef7691';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('123456789'#$0A);
   // SourceEnd
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '7d033205647a2af3dc8339f6cb25643c33ebc622d32979c4b612b02c4903031b';
   lDataRow.ExpectedOutputUTFStrTest := '116509bcc4ec01f1b14d7769241cdb2438073bf9ed2031b11efb52913c0a635c';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('abc');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := '9304bb2f876d9c4f54546cf7ec59e0a006bead745f08c642f25a7c808e0bf86e';
   lDataRow.ExpectedOutputUTFStrTest := '78040669e962b45dd079ad1d98c5a222356c48ae83c531e192a32c34affbf6ae';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('abcdefghijklm');
   lDataRow.AddInputVector('nopqrstuvwxyz');
 
   lDataRow := FTestData.AddRow;
   lDataRow.ExpectedOutput           := 'd5fce38a152a2d9b83ab44c29306ee45ab0aed0e38c957ec431dab6ed6bb71b8';
   lDataRow.ExpectedOutputUTFStrTest := '5fa0a6e55b18b8db6f17280bf1312f1b9651664a849feecb34fd792c392f0ae6';
+  lDataRow.Rounds                   := 8;
   lDataRow.AddInputVector('1234567890', 8);
 
+  // Self generated variants with different rounds
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'b67224738c99d0ef185f2e971eb762ae6d2b456f58734709230b74a2e04bdcee';
+  lDataRow.ExpectedOutputUTFStrTest := 'b67224738c99d0ef185f2e971eb762ae6d2b456f58734709230b74a2e04bdcee';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 2;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'fe211b27f86682ef3a618af1074e3944e4a2a1aac874e36ac3c345e72942baf9';
+  lDataRow.ExpectedOutputUTFStrTest := '616cf9587293327c5b8ba8261f59042762b9232d6cb723915b2e4e3b685e6544';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 2;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '9aeac4d3d3e296ad4e566c6e2811b85a5ba12c9d81b16f07edcaf69222911d4c';
+  lDataRow.ExpectedOutputUTFStrTest := '9aeac4d3d3e296ad4e566c6e2811b85a5ba12c9d81b16f07edcaf69222911d4c';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'acff01a0c465ca381e33414e7d5c62128798a1782dac754e4cfebaa4e92d62ad';
+  lDataRow.ExpectedOutputUTFStrTest := '6d852e82108123b87836db95f7037afb966041e13139ea721928527d7b5b44e3';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 3;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '5148516ae7fc7e89ad8e0b0b8d76ac782498615818fb8eeb08cbab9f07c82a73';
+  lDataRow.ExpectedOutputUTFStrTest := '5148516ae7fc7e89ad8e0b0b8d76ac782498615818fb8eeb08cbab9f07c82a73';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '96240e570bb4677118588156980c1122131c6592aca33a141293348669c9999d';
+  lDataRow.ExpectedOutputUTFStrTest := '3e08ee766c72a975bb4a036a3302fe84f485794fcecd8703eecea844cf1cd424';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 4;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '5ba0047e7d6cbdfbff10fad5490c6d380308a437fbddbb353b1b87083390a21d';
+  lDataRow.ExpectedOutputUTFStrTest := '5ba0047e7d6cbdfbff10fad5490c6d380308a437fbddbb353b1b87083390a21d';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 5;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '00c41213cdc4d6339e3a986448d7a67e8d5fa66bcd1b08371eda8a31d3dc45f4';
+  lDataRow.ExpectedOutputUTFStrTest := '0f1dec19775f20a413378a3f75806d28c8ddfae75bf46b5497350322d0b7751f';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 5;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '121baa1ecd1a1142c12d26a1bb775b658a8e9ac1295d6a6eaa7f2b2cb8d45128';
+  lDataRow.ExpectedOutputUTFStrTest := '121baa1ecd1a1142c12d26a1bb775b658a8e9ac1295d6a6eaa7f2b2cb8d45128';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 6;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'b129dc99917c4ac28ef49179e33426db95dcb7e9285989c420382bae7c2a7145';
+  lDataRow.ExpectedOutputUTFStrTest := '7bc3f5504d4eae0c87253c5320c38f4f0d8a7e2e37b9641ca5fb3906863e98a7';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 6;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '07c8fa1b2d6fd256721f5d9a32ae5d6582890b28f4f5b5e2d7866d1917222a18';
+  lDataRow.ExpectedOutputUTFStrTest := '07c8fa1b2d6fd256721f5d9a32ae5d6582890b28f4f5b5e2d7866d1917222a18';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 7;
+  lDataRow.AddInputVector('');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'db4092e587f30ec659ecd8a71479917e5811f161c9daa49158505fa20c26d51d';
+  lDataRow.ExpectedOutputUTFStrTest := '428f156a2e89ab53f14597eeea9fc9ed08bfb5c7472776da216271058f11522e';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 7;
+  lDataRow.AddInputVector('a');
+
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '45161589ac317be0ceba70db2573ddda6e668a31984b39bf65e4b664b584c63d';
+  lDataRow.ExpectedOutputUTFStrTest := 'fa5f1bed326200b7e25f2d2d8e55f67f4214aa37b3905a613176b2f0f086491d';
+  lDataRow.PaddingByte              := 1;
+  lDataRow.Rounds                   := 8;
+  lDataRow.AddInputVector('a');
 end;
 
 procedure TestTHash_Snefru256.TestDigestSize;
@@ -3927,6 +4953,44 @@ end;
 procedure TestTHash_Snefru256.TestIsPasswordHash;
 begin
   CheckNotEquals(true, FHash.IsPasswordHash);
+end;
+
+procedure TestTHash_Snefru256.TestSetRoundsMax;
+var
+  Hash : THash_Snefru256;
+begin
+  Hash := FHash as THash_Snefru256;
+
+  Hash.Rounds := Hash.GetMinRounds;
+  CheckEquals(2, Hash.Rounds);
+
+  Hash.Rounds := Hash.GetMaxRounds;
+  CheckEquals(8, Hash.Rounds);
+
+  Hash.Rounds := 3;
+  CheckEquals(3, Hash.Rounds);
+
+  Hash.Rounds := Hash.GetMaxRounds + 1;
+  CheckEquals(8, Hash.Rounds);
+end;
+
+procedure TestTHash_Snefru256.TestSetRoundsMin;
+var
+  Hash : THash_Snefru256;
+begin
+  Hash := FHash as THash_Snefru256;
+
+  Hash.Rounds := Hash.GetMaxRounds;
+  CheckEquals(8, Hash.Rounds);
+
+  Hash.Rounds := Hash.GetMinRounds;
+  CheckEquals(2, Hash.Rounds);
+
+  Hash.Rounds := 3;
+  CheckEquals(3, Hash.Rounds);
+
+  Hash.Rounds := Hash.GetMinRounds - 1;
+  CheckEquals(8, Hash.Rounds);
 end;
 
 procedure TestTHash_Snefru256.TestBlockSize;
@@ -4103,6 +5167,33 @@ end;
 procedure THash_TestBase.ConfigHashClass(HashClass: TDECHash; IdxTestData: Integer);
 begin
   HashClass.PaddingByte := FTestData[IdxTestData].PaddingByte;
+  SetPropertyValue(HashClass, 'Rounds', FTestData[IdxTestData].Rounds.ToString);
+end;
+
+function THash_TestBase.SetPropertyValue(aInstance: TObject; const PropertyName, Value: string):Boolean;
+var
+  Ctx: TRttiContext;
+  Prop: TRttiProperty;
+begin
+  Prop := Ctx.GetType(aInstance.ClassType).GetProperty(PropertyName);
+  if (Prop <> nil) and (Prop.Visibility in [mvPublic, mvPublished]) then
+  begin
+    case Prop.PropertyType.TypeKind of
+      tkInteger, tkInt64  : Prop.SetValue(aInstance, Value.ToInteger);
+      tkFloat             : Prop.SetValue(aInstance, Value.ToDouble);
+      tkString, tkUString : Prop.SetValue(aInstance, Value);
+      else
+      begin
+        Result := false;
+        exit;
+      end;
+//      TTypeKind.
+    end;
+
+    Result := true;
+  end
+  else
+    Result := false;
 end;
 
 procedure THash_TestBase.DoTest52(HashClass: TDECHash);
@@ -4131,7 +5222,7 @@ begin
       BufLen := Length(Buf);
 
       // Last part of the test data are bits (relevant for SHA3)
-      if FTestData[i].FinalByteLength > 0 then
+      if FTestData[i].FinalByteBitLength > 0 then
         Break;
 
       if length(Buf) > 0 then
@@ -4146,7 +5237,7 @@ begin
       end;
     end;
 
-    if FTestData[i].FinalByteLength > 0 then
+    if FTestData[i].FinalByteBitLength > 0 then
       Continue;
 
     HashClass.Done;
@@ -4467,7 +5558,6 @@ initialization
   TDUnitX.RegisterTestFixture(TestTHash_Haval224);
   TDUnitX.RegisterTestFixture(TestTHash_Haval256);
   TDUnitX.RegisterTestFixture(TestTHash_Tiger_3Rounds);
-  TDUnitX.RegisterTestFixture(TestTHash_Tiger_4Rounds);
   TDUnitX.RegisterTestFixture(TestTHash_Panama);
 
   TDUnitX.RegisterTestFixture(TestTHash_Whirlpool0);
@@ -4507,7 +5597,6 @@ initialization
                             TestTHash_Haval224.Suite,
                             TestTHash_Haval256.Suite,
                             TestTHash_Tiger_3Rounds.Suite,
-                            TestTHash_Tiger_4Rounds.Suite,
                             TestTHash_Panama.Suite,
 
                             TestTHash_Whirlpool0.Suite,
