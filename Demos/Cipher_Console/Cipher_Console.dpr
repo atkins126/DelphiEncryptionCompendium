@@ -32,23 +32,27 @@ uses
   DECCiphers;
 
 var
-  Cipher     : TCipher_1DES;
+  Cipher     : TCipher_TwoFish;
   // We use raw byte string here since Unicode handling of Windows console
   // is not given
   SourceText : RawByteString;
-  // Key for the initialization of our encryption run
-  CipherKey  : RawByteString;
-  IV         : RawByteString;
+  CipherKey  : RawByteString; // Key for the initialization of our encryption run
+  IV         : RawByteString; // Initialization vector for the en/decryption
   Input,
   Output     : TBytes;
   i          : Integer;
 begin
-  Cipher := TCipher_1DES.Create;
+  Cipher := TCipher_TwoFish.Create;
 
   try
     try
-      // Init our encryption
+      WriteLn('Simple encryption demo using a better block chaining mode than ECB');
+      WriteLn;
+
+      // Init our encryption, note that this is the German spelling of Password
       CipherKey := 'Passwort';
+      // The IV should be different each time you encrypt/decrypt something. The
+      // decrypting party needs to know the IV as well of course.
       IV := #0#0#0#0#0#0#0#0;
       Cipher.Init(CipherKey, IV, 0);
       Cipher.Mode := cmCBCx;
@@ -59,6 +63,8 @@ begin
 
       // Encrypt
       Output := Cipher.EncodeBytes(Input);
+      // clean up inside the cipher instance, which also removes the key from RAM
+      Cipher.Done;
 
       Write('Encrypted data in hex: ');
       for i := 0 to high(Output) do
@@ -69,6 +75,8 @@ begin
       // Decrypt
       Cipher.Init(CipherKey, IV, 0);
       Output := Cipher.DecodeBytes(Output);
+      // clean up inside the cipher instance, which also removes the key from RAM
+      Cipher.Done;
 
       SourceText := RawByteString(System.SysUtils.StringOf(Output));
 
@@ -77,19 +85,24 @@ begin
       // Show that using a different key results in a different output
       WriteLn;
 
+      // note the English spelling of Password here, so we differ in the last char
       CipherKey := 'Password';
       Cipher.Init(CipherKey, IV, 0);
       Output := Cipher.DecodeBytes(Output);
+      // clean up inside the cipher instance, which also removes the key from RAM
+      Cipher.Done;
 
       SourceText := RawByteString(System.SysUtils.StringOf(Output));
 
       WriteLn('Decrypted with different key: ' + SourceText);
 
-      ReadLn;
+      WriteLn;
     except
       on E: Exception do
         Writeln(E.ClassName, ': ', E.Message);
     end;
+
+    ReadLn;
   finally
     Cipher.Free;
   end;

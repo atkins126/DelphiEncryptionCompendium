@@ -104,12 +104,26 @@ type
   {$IFDEF DUnitX} [TestFixture] {$ENDIF}
   TestTDECCipher = class(TCipherBasis)
   strict private
+    FCipher : TCipher_AES;
+
+    procedure DoInitRawByteStringNoKeyException;
+    procedure DoInitWideStringNoKeyException;
+    procedure DoInitMACWrongModeException;
   public
     procedure SetUp; override;
     procedure TearDown; override;
   published
     procedure TestIsClassListCreated;
     procedure TestValidCipherSetDefaultCipherClass;
+    procedure TestIsAuthenticatedBlockMode;
+    procedure TestClassByIdentity;
+    procedure TestInitRawByteStringNoKey;
+    procedure TestInitRawByteStringInitVector;
+    procedure TestInitRawByteStringNoInitVector;
+    procedure TestInitWideStringNoKey;
+    procedure TestInitWideStringInitVector;
+    procedure TestInitWideStringNoInitVector;
+    procedure TestMACWrongMode;
   end;
 
   // Testmethoden for Klasse TCipher_Null
@@ -153,6 +167,10 @@ type
 
     procedure Init(TestData: TCipherTestData);
     procedure Done;
+
+    procedure DoTestInitKeyTooLong;
+    procedure DoTestInitVectorTooLong;
+    procedure DoTestInitKey0;
   public
     procedure SetUp; override;
     procedure TearDown; override;
@@ -162,6 +180,9 @@ type
     procedure TestEncode;
     procedure TestDecode;
     procedure TestClassByName;
+    procedure TestInitKeyTooLong;
+    procedure TestInitVectorTooLong;
+    procedure TestInitKey0;
   end;
 
   // Testmethods for class TCipher_IDEA
@@ -258,6 +279,9 @@ type
     procedure TestEncode;
     procedure TestDecode;
     procedure TestClassByName;
+    procedure TestMinRounds;
+    procedure TestMaxRounds;
+    procedure TestRounds;
   end;
 
   // Testmethods for class TCipher_AES
@@ -664,6 +688,9 @@ type
     procedure TestEncode;
     procedure TestDecode;
     procedure TestClassByName;
+    procedure TestMinRounds;
+    procedure TestMaxRounds;
+    procedure TestRounds;
   end;
 
   // Testmethods for class TCipher_SAFER
@@ -683,6 +710,9 @@ type
     procedure TestEncode;
     procedure TestDecode;
     procedure TestClassByName;
+    procedure TestMinRounds;
+    procedure TestMaxRounds;
+    procedure TestRounds;
   end;
 
   // Testmethods for class TCipher_Shark
@@ -761,6 +791,9 @@ type
     procedure TestEncode;
     procedure TestDecode;
     procedure TestClassByName;
+    procedure TestMinRounds;
+    procedure TestMaxRounds;
+    procedure TestRounds;
   end;
 
   // Testmethods for class TCipher_XTEA
@@ -1001,6 +1034,62 @@ end;
 procedure TestTCipher_Twofish.TestIdentity;
 begin
   CheckEquals($B38AB3E6, FCipher_Twofish.Identity);
+end;
+
+procedure TestTCipher_Twofish.DoTestInitKeyTooLong;
+var
+  Key : TBytes;
+  IV  : TBytes;
+begin
+  SetLength(Key, FCipher_Twofish.Context.KeySize + 1);
+  FillChar(Key[0], Length(Key), 123);
+
+  SetLength(IV, 8);
+  FillChar(IV[0], Length(IV), 0);
+
+  FCipher_Twofish.Init(Key[0], Length(Key), IV[0], Length(IV), 255);
+end;
+
+procedure TestTCipher_Twofish.TestInitKeyTooLong;
+begin
+  CheckException(DoTestInitKeyTooLong, EDECCipherException);
+end;
+
+procedure TestTCipher_Twofish.DoTestInitVectorTooLong;
+var
+  Key : TBytes;
+  IV  : TBytes;
+begin
+  SetLength(Key, FCipher_Twofish.Context.KeySize);
+  FillChar(Key[0], Length(Key), 123);
+
+  SetLength(IV, 65535*8);
+  FillChar(IV[0], Length(IV), 0);
+
+  FCipher_Twofish.Init(Key[0], Length(Key), IV[0], Length(IV), 255);
+end;
+
+procedure TestTCipher_Twofish.TestInitVectorTooLong;
+begin
+  CheckException(DoTestInitVectorTooLong, EDECCipherException);
+end;
+
+procedure TestTCipher_Twofish.DoTestInitKey0;
+var
+  Key : TBytes;
+  IV  : TBytes;
+begin
+  SetLength(Key, 0);
+
+  SetLength(IV, 8);
+  FillChar(IV[0], Length(IV), 0);
+
+  FCipher_Twofish.Init(Key, IV, 255);
+end;
+
+procedure TestTCipher_Twofish.TestInitKey0;
+begin
+  CheckException(DoTestInitKey0, EDECCipherException);
 end;
 
 procedure TestTCipher_Twofish.TestClassByName;
@@ -1410,6 +1499,33 @@ end;
 procedure TestTCipher_RC6.TestIdentity;
 begin
   CheckEquals($9DADBE76, FCipher_RC6.Identity);
+end;
+
+procedure TestTCipher_RC6.TestMaxRounds;
+begin
+  FCipher_RC6.Rounds := FCipher_RC6.Context.MaxRounds;
+  CheckEquals(FCipher_RC6.Context.MaxRounds, FCipher_RC6.Rounds);
+
+  FCipher_RC6.Rounds := FCipher_RC6.Context.MaxRounds + 1;
+  CheckEquals(FCipher_RC6.Context.MaxRounds, FCipher_RC6.Rounds);
+end;
+
+procedure TestTCipher_RC6.TestMinRounds;
+begin
+  FCipher_RC6.Rounds := FCipher_RC6.Context.MinRounds;
+  CheckEquals(FCipher_RC6.Context.MinRounds, FCipher_RC6.Rounds);
+
+  FCipher_RC6.Rounds := FCipher_RC6.Context.MinRounds - 1;
+  CheckEquals(FCipher_RC6.Context.MinRounds, FCipher_RC6.Rounds);
+end;
+
+procedure TestTCipher_RC6.TestRounds;
+begin
+  FCipher_RC6.Rounds := FCipher_RC6.Context.MinRounds + 1;
+  CheckEquals(FCipher_RC6.Context.MinRounds + 1, FCipher_RC6.Rounds);
+
+  FCipher_RC6.Rounds := FCipher_RC6.Context.MaxRounds - 1;
+  CheckEquals(FCipher_RC6.Context.MaxRounds - 1, FCipher_RC6.Rounds);
 end;
 
 procedure TestTCipher_Square.Done;
@@ -1969,7 +2085,7 @@ procedure TestTCipher_2DES.SetUp;
 begin
   FCipher_2DES := TCipher_2DES.Create;
 
-  SetLength(FTestData, 1);
+  SetLength(FTestData, 2);
 
   FTestData[0].OutputData  := '665c7927e91c8ba0a9e4995a158cbd465c9c75913c38069d75b47e68e947fdab';
   FTestData[0].InputData   := TFormat_ESCAPE.Decode('\x30\x44\xED\x6E\x45\xA4' +
@@ -1983,6 +2099,15 @@ begin
   FTestData[0].InitVector := '';
   FTestData[0].Filler     := $FF;
   FTestData[0].Mode       := cmCTSx;
+
+  // Test data for GitHub issue #34
+  FTestData[1].OutputData  := 'b71faab72d3c4f50';
+  FTestData[1].InputData   := TFormat_HEX.Decode('31C35143663E7A00');
+
+  FTestData[1].Key        := TFormat_HEX.Decode('00112233445566778899AABBCCDDEEFF');
+  FTestData[1].InitVector := TFormat_HEX.Decode('0000000000000000');
+  FTestData[1].Filler     := $FF;
+  FTestData[1].Mode       := cmCBCx;
 end;
 
 procedure TestTCipher_2DES.TearDown;
@@ -2489,8 +2614,8 @@ begin
   CheckEquals(   8,  ReturnValue.BlockSize);
   CheckEquals(   8,  ReturnValue.BufferSize);
   CheckEquals( 128,  ReturnValue.AdditionalBufferSize);
-  CheckEquals(   1,  ReturnValue.MinRounds);
-  CheckEquals( 256,  ReturnValue.MaxRounds);
+  CheckEquals(  12,  ReturnValue.MinRounds);
+  CheckEquals(  16,  ReturnValue.MaxRounds);
   CheckEquals(false, ReturnValue.NeedsAdditionalBufferBackup);
   CheckEquals(true,  [ctBlock, ctSymmetric] = ReturnValue.CipherType);
 end;
@@ -3056,7 +3181,7 @@ begin
   CheckEquals(   8,  ReturnValue.BlockSize);
   CheckEquals(   8,  ReturnValue.BufferSize);
   CheckEquals( 136,  ReturnValue.AdditionalBufferSize);
-  CheckEquals(   1,  ReturnValue.MinRounds);
+  CheckEquals(   0,  ReturnValue.MinRounds);
   CheckEquals( 256,  ReturnValue.MaxRounds);
   CheckEquals(false, ReturnValue.NeedsAdditionalBufferBackup);
   CheckEquals(true,  [ctBlock, ctSymmetric] = ReturnValue.CipherType);
@@ -3075,6 +3200,55 @@ end;
 procedure TestTCipher_RC5.TestIdentity;
 begin
   CheckEquals($04A4EFCC, FCipher_RC5.Identity);
+end;
+
+procedure TestTCipher_RC5.TestMaxRounds;
+var
+  Cipher_RC5Rounds : TCipher_RC5;
+begin
+  Cipher_RC5Rounds := TCipher_RC5.Create;
+  try
+    Cipher_RC5Rounds.Rounds := Cipher_RC5Rounds.Context.MaxRounds;
+    CheckEquals(Cipher_RC5Rounds.Context.MaxRounds, Cipher_RC5Rounds.Rounds);
+
+    Cipher_RC5Rounds.Rounds := Cipher_RC5Rounds.Context.MaxRounds + 1;
+    CheckEquals(Cipher_RC5Rounds.Context.MaxRounds, Cipher_RC5Rounds.Rounds);
+  finally
+    Cipher_RC5Rounds.Free;
+  end;
+end;
+
+procedure TestTCipher_RC5.TestMinRounds;
+var
+  Cipher_RC5Rounds : TCipher_RC5;
+begin
+  Cipher_RC5Rounds := TCipher_RC5.Create;
+  try
+    Cipher_RC5Rounds.Rounds := Cipher_RC5Rounds.Context.MinRounds;
+    CheckEquals(Cipher_RC5Rounds.Context.MinRounds, Cipher_RC5Rounds.Rounds);
+
+    Cipher_RC5Rounds.Rounds := Cipher_RC5Rounds.Context.MinRounds - 1;
+    CheckEquals(12, Cipher_RC5Rounds.Rounds);
+  finally
+    Cipher_RC5Rounds.Free;
+  end;
+end;
+
+procedure TestTCipher_RC5.TestRounds;
+var
+  Cipher_RC5Rounds : TCipher_RC5;
+  i                : Integer;
+begin
+  Cipher_RC5Rounds := TCipher_RC5.Create;
+  try
+    for i := Cipher_RC5Rounds.Context.MinRounds to Cipher_RC5Rounds.Context.MaxRounds do
+    begin
+      Cipher_RC5Rounds.Rounds := i;
+      CheckEquals(i, Cipher_RC5Rounds.Rounds);
+    end;
+  finally
+    Cipher_RC5Rounds.Free;
+  end;
 end;
 
 procedure TestTCipher_SAFER.Done;
@@ -3155,6 +3329,103 @@ end;
 procedure TestTCipher_SAFER.TestIdentity;
 begin
   CheckEquals($97CE1F8A, FCipher_SAFER.Identity);
+end;
+
+procedure TestTCipher_SAFER.TestMaxRounds;
+var
+  FCipher_SAFERRounds : TCipher_SAFER;
+begin
+  FCipher_SAFERRounds := TCipher_SAFER.Create;
+  try
+    FCipher_SAFERRounds.Rounds := FCipher_SAFERRounds.Context.MaxRounds;
+    CheckEquals(FCipher_SAFERRounds.Context.MaxRounds, FCipher_SAFERRounds.Rounds);
+
+    FCipher_SAFERRounds.Version := svK40;
+    FCipher_SAFERRounds.Rounds := FCipher_SAFERRounds.Context.MaxRounds + 1;
+    CheckEquals(5, FCipher_SAFERRounds.Rounds);
+
+    FCipher_SAFERRounds.Version := svSK40;
+    FCipher_SAFERRounds.Rounds := FCipher_SAFERRounds.Context.MaxRounds + 1;
+    CheckEquals(5, FCipher_SAFERRounds.Rounds);
+
+    FCipher_SAFERRounds.Version := svK64;
+    FCipher_SAFERRounds.Rounds := FCipher_SAFERRounds.Context.MaxRounds + 1;
+    CheckEquals(6, FCipher_SAFERRounds.Rounds);
+
+    FCipher_SAFERRounds.Version := svSK64;
+    FCipher_SAFERRounds.Rounds := FCipher_SAFERRounds.Context.MaxRounds + 1;
+    CheckEquals(6, FCipher_SAFERRounds.Rounds);
+
+    FCipher_SAFERRounds.Version := svK128;
+    FCipher_SAFERRounds.Rounds := FCipher_SAFERRounds.Context.MaxRounds + 1;
+    CheckEquals(10, FCipher_SAFERRounds.Rounds);
+
+    FCipher_SAFERRounds.Version := svSK128;
+    FCipher_SAFERRounds.Rounds := FCipher_SAFERRounds.Context.MaxRounds + 1;
+    CheckEquals(10, FCipher_SAFERRounds.Rounds);
+  finally
+    FCipher_SAFERRounds.Free;
+  end;
+end;
+
+procedure TestTCipher_SAFER.TestMinRounds;
+var
+  FCipher_SAFERRounds : TCipher_SAFER;
+begin
+  FCipher_SAFERRounds := TCipher_SAFER.Create;
+  try
+    FCipher_SAFERRounds.Rounds := FCipher_SAFERRounds.Context.MinRounds;
+    CheckEquals(FCipher_SAFERRounds.Context.MinRounds, FCipher_SAFERRounds.Rounds);
+
+    FCipher_SAFERRounds.Version := svK40;
+    FCipher_SAFERRounds.Rounds := FCipher_SAFERRounds.Context.MinRounds - 1;
+    CheckEquals(5, FCipher_SAFERRounds.Rounds);
+
+    FCipher_SAFERRounds.Version := svSK40;
+    FCipher_SAFERRounds.Rounds := FCipher_SAFERRounds.Context.MinRounds - 1;
+    CheckEquals(5, FCipher_SAFERRounds.Rounds);
+
+    FCipher_SAFERRounds.Version := svK64;
+    FCipher_SAFERRounds.Rounds := FCipher_SAFERRounds.Context.MinRounds - 1;
+    CheckEquals(6, FCipher_SAFERRounds.Rounds);
+
+    FCipher_SAFERRounds.Version := svSK64;
+    FCipher_SAFERRounds.Rounds := FCipher_SAFERRounds.Context.MinRounds - 1;
+    CheckEquals(6, FCipher_SAFERRounds.Rounds);
+
+    FCipher_SAFERRounds.Version := svK128;
+    FCipher_SAFERRounds.Rounds := FCipher_SAFERRounds.Context.MinRounds - 1;
+    CheckEquals(10, FCipher_SAFERRounds.Rounds);
+
+    FCipher_SAFERRounds.Version := svSK128;
+    FCipher_SAFERRounds.Rounds := FCipher_SAFERRounds.Context.MinRounds - 1;
+    CheckEquals(10, FCipher_SAFERRounds.Rounds);
+  finally
+    FCipher_SAFERRounds.Free;
+  end;
+end;
+
+procedure TestTCipher_SAFER.TestRounds;
+var
+  FCipher_SAFERRounds : TCipher_SAFER;
+  Version             : TSAFERVersion;
+  i                   : Integer;
+begin
+  FCipher_SAFERRounds := TCipher_SAFER.Create;
+  try
+    for Version := Low(Tsaferversion) to high(Tsaferversion) do
+    begin
+      FCipher_SAFERRounds.Version := Version;
+
+      for i := FCipher_SAFERRounds.Context.MinRounds to FCipher_SAFERRounds.Context.MaxRounds do
+      begin
+        FCipher_SAFERRounds.Rounds := i;
+        CheckEquals(i, FCipher_SAFERRounds.Rounds);
+      end;
+    end;
+  finally
+    FCipher_SAFERRounds.Free;
+  end;
 end;
 
 procedure TestTCipher_Shark.Done;
@@ -3490,6 +3761,55 @@ begin
   CheckEquals($011B81DD, FCipher_TEA.Identity);
 end;
 
+procedure TestTCipher_TEA.TestMaxRounds;
+var
+  Cipher_TEARounds : TCipher_TEA;
+begin
+  Cipher_TEARounds := TCipher_TEA.Create;
+  try
+    Cipher_TEARounds.Rounds := Cipher_TEARounds.Context.MaxRounds;
+    CheckEquals(Cipher_TEARounds.Context.MaxRounds, Cipher_TEARounds.Rounds);
+
+    Cipher_TEARounds.Rounds := Cipher_TEARounds.Context.MaxRounds + 1;
+    CheckEquals(Cipher_TEARounds.Context.MaxRounds, Cipher_TEARounds.Rounds);
+  finally
+    Cipher_TEARounds.Free;
+  end;
+end;
+
+procedure TestTCipher_TEA.TestMinRounds;
+var
+  Cipher_TEARounds : TCipher_TEA;
+begin
+  Cipher_TEARounds := TCipher_TEA.Create;
+  try
+    Cipher_TEARounds.Rounds := Cipher_TEARounds.Context.MinRounds;
+    CheckEquals(Cipher_TEARounds.Context.MinRounds, Cipher_TEARounds.Rounds);
+
+    Cipher_TEARounds.Rounds := Cipher_TEARounds.Context.MinRounds - 1;
+    CheckEquals(Cipher_TEARounds.Context.MinRounds, Cipher_TEARounds.Rounds);
+  finally
+    Cipher_TEARounds.Free;
+  end;
+end;
+
+procedure TestTCipher_TEA.TestRounds;
+var
+  Cipher_TEARounds : TCipher_TEA;
+  i                : Integer;
+begin
+  Cipher_TEARounds := TCipher_TEA.Create;
+  try
+    for i := Cipher_TEARounds.Context.MinRounds to Cipher_TEARounds.Context.MaxRounds do
+    begin
+      Cipher_TEARounds.Rounds := i;
+      CheckEquals(i, Cipher_TEARounds.Rounds);
+    end;
+  finally
+    Cipher_TEARounds.Free;
+  end;
+end;
+
 procedure TestTCipher_XTEA.Done;
 begin
   FCipher_XTEA.Done;
@@ -3778,16 +4098,155 @@ end;
 procedure TestTDECCipher.SetUp;
 begin
   inherited;
+
+  FCipher := TCipher_AES.Create;
 end;
 
 procedure TestTDECCipher.TearDown;
 begin
+  FCipher.Free;
+
   inherited;
+end;
+
+procedure TestTDECCipher.TestInitRawByteStringInitVector;
+var
+  IV    : string;
+  i     : Integer;
+begin
+  CheckEquals(16, FCipher.InitVectorSize);
+  FCipher.Init(RawByteString('Hihi'), RawByteString('012345'), 255);
+  CheckEquals(16, FCipher.InitVectorSize);
+
+  IV := '';
+
+  for i := 0 to 15 do
+    IV := IV + Chr(FCipher.InitVector[i]);
+
+  CheckEquals(string('012345'+#255#255#255#255#255#255#255#255#255#255), IV);
+end;
+
+procedure TestTDECCipher.TestInitRawByteStringNoInitVector;
+var
+  IV    : string;
+  i     : Integer;
+begin
+  CheckEquals(16, FCipher.InitVectorSize);
+  FCipher.Init(RawByteString('Hihi'), RawByteString(''), 255);
+  CheckEquals(16, FCipher.InitVectorSize);
+
+  IV := '';
+
+  for i := 0 to 15 do
+    IV := IV + Chr(FCipher.InitVector[i]);
+
+  CheckEquals('ba163f76a3a8bd77b75ebe293f229d10',
+              string(TFormat_HexL.Encode(RawByteString(IV))));
+end;
+
+procedure TestTDECCipher.TestInitRawByteStringNoKey;
+begin
+  CheckException(DoInitRawByteStringNoKeyException, EDECCipherException);
+end;
+
+procedure TestTDECCipher.TestInitWideStringInitVector;
+var
+  IV    : string;
+  i     : Integer;
+begin
+  CheckEquals(16, FCipher.InitVectorSize);
+  FCipher.Init(WideString('Hihi'), WideString('012345'), 255);
+  CheckEquals(16, FCipher.InitVectorSize);
+
+  IV := '';
+
+  for i := 0 to 15 do
+    IV := IV + Chr(FCipher.InitVector[i]);
+
+  CheckEquals(string('0'#0'1'#0'2'#0'3'#0'4'#0'5'#0#255#255#255#255), IV);
+end;
+
+procedure TestTDECCipher.TestInitWideStringNoInitVector;
+var
+  IV    : string;
+  i     : Integer;
+
+  b: TBytes;
+begin
+  CheckEquals(16, FCipher.InitVectorSize);
+  FCipher.Init(WideString('Hihi'), WideString(''), 255);
+  CheckEquals(16, FCipher.InitVectorSize);
+
+  IV := '';
+
+  for i := 0 to 15 do
+    IV := IV + Chr(FCipher.InitVector[i]);
+
+  b := TFormat_HexL.Encode(BytesOf(IV));
+  IV := '';
+
+  for i := 0 to length(b)-1 do
+    IV := IV + IntToHex(b[i], 2);
+
+  CheckEquals('6639353537346562653635343066636636383366343236323532636133663235',
+              IV);
+end;
+
+procedure TestTDECCipher.TestInitWideStringNoKey;
+begin
+  CheckException(DoInitWideStringNoKeyException, EDECCipherException);
+end;
+
+procedure TestTDECCipher.DoInitMACWrongModeException;
+begin
+  FCipher.Mode := TCipherMode.cmECBx;
+  FCipher.CalcMAC(TFormat_HexL);
+end;
+
+procedure TestTDECCipher.DoInitRawByteStringNoKeyException;
+begin
+  FCipher.Init(RawByteString(''), RawByteString('12345678'), 255);
+end;
+
+procedure TestTDECCipher.DoInitWideStringNoKeyException;
+begin
+  FCipher.Init(WideString(''), WideString('12345678'), 255);
+end;
+
+
+procedure TestTDECCipher.TestIsAuthenticatedBlockMode;
+begin
+  CheckEquals(false, IsAuthenticatedBlockMode(cmCTSx));
+  CheckEquals(false, IsAuthenticatedBlockMode(cmCBCx));
+  CheckEquals(false, IsAuthenticatedBlockMode(cmCFB8));
+  CheckEquals(false, IsAuthenticatedBlockMode(cmCFBx));
+  CheckEquals(false, IsAuthenticatedBlockMode(cmOFB8));
+  CheckEquals(false, IsAuthenticatedBlockMode(cmOFBx));
+  CheckEquals(false, IsAuthenticatedBlockMode(cmCFS8));
+  CheckEquals(false, IsAuthenticatedBlockMode(cmCFSx));
+  CheckEquals(false, IsAuthenticatedBlockMode(cmECBx));
+  CheckEquals(true, IsAuthenticatedBlockMode(cmGCM));
+end;
+
+procedure TestTDECCipher.TestClassByIdentity;
+var
+  ReturnValue: TDECClass;
+begin
+  ReturnValue := TDECCipher.ClassByIdentity(TCipher_AES.Identity);
+  CheckEquals(ReturnValue, TCipher_AES);
+
+  ReturnValue := TDECCipher.ClassByIdentity(TCipher_XTEA.Identity);
+  CheckEquals(ReturnValue, TCipher_XTEA);
 end;
 
 procedure TestTDECCipher.TestIsClassListCreated;
 begin
   CheckEquals(true, assigned(TDECCipher.ClassList), 'Class list has not been created in initialization');
+end;
+
+procedure TestTDECCipher.TestMACWrongMode;
+begin
+  CheckException(DoInitMACWrongModeException, EDECException);
 end;
 
 procedure TestTDECCipher.TestValidCipherSetDefaultCipherClass;

@@ -56,6 +56,12 @@ type
   TUInt64Array = array[0..1023] of UInt64;
 
   /// <summary>
+  ///   List of standard bit lengths defined in the official standard for some
+  ///  algorithm property which allows a variable bit length.
+  /// </summary>
+  TStandardBitLengths = array of UInt16;
+
+  /// <summary>
   ///   Reason for calling the progress event
   /// </summary>
   TDECProgressState = (Started, Processing, Finished);
@@ -129,6 +135,11 @@ type
   ///   Exception class for reporting encryption/decryption caused exceptions
   /// </summary>
   EDECCipherException = class(EDECException);
+  /// <summary>
+  ///   Exception class for reporting calculation of a wrong authentication
+  ///   value when decrypting using a cipher supporting authentication
+  /// </summary>
+  EDECCipherAuthenticationException = class(EDECException);
 
   /// <summary>
   ///   Exception class for reporting the use of abstract things which cannot

@@ -18,6 +18,8 @@ unit DECCipherFormats;
 
 interface
 
+{$INCLUDE DECOptions.inc}
+
 uses
   {$IFDEF FPC}
   SysUtils, Classes,
@@ -602,14 +604,26 @@ function TDECFormattedCipher.EncodeBytes(const Source: TBytes): TBytes;
 begin
   SetLength(Result, Length(Source));
   if Length(Result) > 0 then
-    Encode(Source[0], Result[0], Length(Source));
+    Encode(Source[0], Result[0], Length(Source))
+  else
+    if (FMode = cmGCM) then
+      EncodeGCM(@Source, @Result, 0);
 end;
 
 function TDECFormattedCipher.DecodeBytes(const Source: TBytes): TBytes;
 begin
   Result := Source;
+
   if Length(Result) > 0 then
-    Decode(Result[0], Result[0], Length(Source));
+  begin
+    if (FMode = cmGCM) then
+      SetLength(Result, Length(Source));
+
+    Decode(Source[0], Result[0], Length(Source));
+  end
+  else
+    if (FMode = cmGCM) then
+      DecodeGCM(@Source, @Result, 0);
 end;
 
 procedure TDECFormattedCipher.DoEncodeDecodeStream(const Source, Dest: TStream;

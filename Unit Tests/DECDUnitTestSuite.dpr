@@ -17,12 +17,14 @@ program DECDUnitTestSuite;
 
 uses
   Vcl.Forms,
-  TestFramework,
   {$IFDEF TESTINSIGHT}
   TestInsight.Client,
-  {$ENDIF }
+  TestInsight.DUnit,
+  {$ELSE}
+  TestFramework,
   GUITestRunner,
   TextTestRunner,
+  {$ENDIF }
   TestDECUtil in 'Tests\TestDECUtil.pas',
   TestDECFormatBase in 'Tests\TestDECFormatBase.pas',
   TestDECFormat in 'Tests\TestDECFormat.pas',
@@ -36,7 +38,8 @@ uses
   TestDECTestDataContainer in 'Tests\TestDECTestDataContainer.pas',
   TestDECCipherFormats in 'Tests\TestDECCipherFormats.pas',
   TestDECHashMAC in 'Tests\TestDECHashMAC.pas',
-  TestDECHashSHA3 in 'Tests\TestDECHashSHA3.pas';
+  TestDECHashSHA3 in 'Tests\TestDECHashSHA3.pas',
+  TestDECCipherModesGCM in 'Tests\TestDECCipherModesGCM.pas';
 
 {$R *.RES}
 
@@ -64,9 +67,11 @@ begin
     TestInsight.DUnit.RunRegisteredTests
     {$ENDIF}
   else
+    {$IFNDEF TESTINSIGHT}
     if IsConsole then
       TextTestRunner.RunRegisteredTests.Free
     else
       GUITestRunner.RunRegisteredTests;
+    {$ENDIF}
 end.
 

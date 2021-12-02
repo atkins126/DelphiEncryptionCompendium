@@ -1,7 +1,7 @@
 # DEC - Delphi Encryption Compendium
 
 ## What is DEC?
-DEC is a library for Embarcadero Delphi, containing different cryptographic algorithms .
+DEC is a library for Embarcadero Delphi, containing different cryptographic algorithms.
 It contains algorithms for these categories:
 
 * Ciphers: encryption/decryption of data
@@ -12,7 +12,7 @@ It contains algorithms for these categories:
 * CRCs: non cryptographic checksums based on CRC algorithms
 
 ## Which Delphi versions are compatible?
-The current version 6.3 is compatible with Delphi 2009 - Delphi 10.4.2 Sydney. 
+The current version 6.4.1 is compatible with Delphi 2009 - Delphi 11.0 Alexandria. 
 When defining the NO_ASM define in DECOptions.inc it is compatible with all 
 platforms supported by Delphi! It might be compatible with FPC, but this has 
 not been focus and is not tested. The development branch contains a more
@@ -29,7 +29,7 @@ A list of changes is available in the docs folder.
 V6.0 was released shortly before Christmas 2020. Since then work continued
 by some users supplying code, reporting bugs (regressions) along with fixes
 and by adding SHA2-224 which was still missing.
-Details about the changes and additions in V6.2 can be found in the 
+Details about the changes and additions in V6.4.1 can be found in the 
 VersionHistory.pdf file in the docs subfolder of the development branch.
 
 In comparison to 5.2 we added some console, VCL and FMX based demo applications.
@@ -37,9 +37,9 @@ The FMX based demos are even available via Google play as "DEC cipher demo" and
 "DEC hash demo".
 
 ## Where can I get further information? For example if I'd like to contribute?
-In the root folder of DEC V6.3 you will find further files with information about 
+In the root folder of DEC V6.4.1 you will find further files with information about 
 this project like *NOTICE.txt*, *CONTRIBUTING.md*, *SECURITY.md*.
-Also take the time to read DEC61.pdf in the *Docs* folder or look at the demos 
+Also take the time to read DEC64.pdf in the *Docs* folder and look at the demos 
 provided in the *Demos* subfolder.
 
 ## Has it been tested?
@@ -59,7 +59,8 @@ We're talking at block chaining mode tests for the ciphers specifically.
 In DEC 6.2 the unit tests for the hash classes were looked at and where not already 
 used original test data vectors (as far as we could find them - for most we could) 
 have been added to improve test coverage. V6.3 added further synthesized tests for 
-some hash classes.
+some hash classes. For SHA3 and for the GCM block chaining method the original test
+vectors provided by NIST are used for the unit tests.
 
 ## Contained hash algorithms
 * MD2        
@@ -143,6 +144,7 @@ Modes ending on x have been invented by the original developer of DEC
 * OFBx
 * CFS8
 * CFSx
+* GCM
 
 ## Contained key derivation algorithms:
 * KDF1
@@ -168,6 +170,9 @@ Modes ending on x have been invented by the original developer of DEC
 * UU       
 * XX       
 * ESCAPE   
+* BigEndian16
+* BigEndian32
+* BigEndian64
 
 ## Contained CRCs
 * 8

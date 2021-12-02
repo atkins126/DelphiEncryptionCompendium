@@ -24,13 +24,14 @@ uses
   {$IFDEF FPC}
   SysUtils, Classes,
   {$ELSE}
-  System.SysUtils, System.Classes,
+  System.SysUtils, System.Classes, Generics.Collections,
   {$ENDIF}
   DECBaseClass, DECFormatBase;
 
 type
   /// <summary>
-  ///   Possible kindes of cipher algorithms
+  ///   Possible kindes of cipher algorithms independent of any block
+  ///   concatenation mode etc.
   ///   <para>
   ///     ctNull = special "do nothing cipher"
   ///    </para>
@@ -264,6 +265,12 @@ type
     FInitializationVector: PByteArray;
 
     /// <summary>
+    ///   Size of the initialization vector in byte. Required for algorithms
+    ///   like GCM.
+    /// </summary>
+    FInitVectorSize: Integer;
+
+    /// <summary>
     ///   Cipher modes are used to derive a stream cipher from block cipher
     ///   algorithms. For this something from the last entrypted block (or for
     ///   the first block from the vector) is used in the encryption of the next
@@ -304,15 +311,25 @@ type
     procedure CheckState(States: TCipherStates);
 
     /// <summary>
-    ///   Initialize the key, based on the key passed in
+    ///   Initialize the key, based on the key passed in. This is called before
+    ///   OnAfterInitVectorInitialization is called.
     /// </summary>
     /// <param name="Key">
     ///   Encryption/Decryption key to be used
     /// </param>
     /// <param name="Size">
-    ///   Size of the key passed in bytes. 
+    ///   Size of the key passed in bytes.
     /// </param>
     procedure DoInit(const Key; Size: Integer); virtual; abstract;
+    /// <summary>
+    ///   Allows to run code after the initialization vector has been initialized
+    ///   inside the Init call, which is after DoInit has been called.
+    /// </summary>
+    /// <param name="OriginalInitVector">
+    ///   Value of the init vector as originally passed to the Init call without
+    ///   any initialization steps done to/on it
+    /// </param>
+    procedure OnAfterInitVectorInitialization(const OriginalInitVector: TBytes); virtual; abstract;
 
     /// <summary>
     ///   This abstract method needs to be overwritten by each concrete encryption
@@ -361,6 +378,11 @@ type
     ///   predecessor to avoid certain attacks
     /// </summary>
     procedure SetMode(Value: TCipherMode);
+    /// <summary>
+    ///   When setting a mode it might need to be initialized and that can
+    ///   usually only be done in a child class.
+    /// </summary>
+    procedure InitMode; virtual; abstract;
   public
     /// <summary>
     ///   List of registered DEC classes. Key is the Identity of the class.
@@ -395,6 +417,17 @@ type
     class function ClassByIdentity(Identity: Int64): TDECCipherClass;
 
     /// <summary>
+    ///   Provides meta data about the cipher algorithm used like key size.
+    ///   To be overidden in the concrete cipher classes.
+    /// </summary>
+    /// <remarks>
+    ///   C++ does not support virtual static functions thus the base cannot be
+    ///   marked 'abstract'. Calling this version of the method will lead to an
+    ///   EDECAbstractError
+    /// </remarks>
+    class function Context: TCipherContext; virtual;
+
+    /// <summary>
     ///   Initializes the instance. Relies in parts on information given by the
     ///   Context class function.
     /// </summary>
@@ -406,15 +439,14 @@ type
     destructor Destroy; override;
 
     /// <summary>
-    ///   Provides meta data about the cipher algorithm used like key size.
-    ///   To be overidden in the concrete cipher classes.
+    ///   Provides information whether the selected block concatenation mode
+    ///   provides authentication functionality or not.
     /// </summary>
-    /// <remarks>
-    ///   C++ does not support virtual static functions thus the base cannot be
-    ///   marked 'abstract'. Calling this version of the method will lead to an
-    ///   EDECAbstractError
-    /// </remarks>
-    class function Context: TCipherContext; virtual;
+    /// <returns>
+    ///   true if the selected block mode is one providing authentication features
+    ///   as well
+    /// </returns>
+    function IsAuthenticated: Boolean;
 
     /// <summary>
     ///   Initializes the cipher with the necessary encryption/decryption key
@@ -535,12 +567,11 @@ type
     {$ENDIF}
 
     /// <summary>
-{ TODO : Description needs to be revised }
     ///   Properly finishes the cryptographic operation. It needs to be called
     ///   at the end of encrypting or decrypting data, otherwise the last block
     ///   or last byte of the data will not be properly processed.
     /// </summary>
-    procedure Done;
+    procedure Done; virtual;
 
     // Encoding / Decoding Routines
     // Do not add further methods of that kind here! If needed add them to
@@ -570,7 +601,9 @@ type
     ///   Encrypted data. Init must have been called previously.
     /// </returns>
     function EncodeRawByteString(const Source: RawByteString;
-                                 Format: TDECFormatClass = nil): RawByteString; deprecated; // please use EncodeBytes functions now
+                                 Format: TDECFormatClass = nil): RawByteString;
+                                 deprecated; // please use EncodeBytes functions now
+                                             // or TCipherFormats.EncodeStringToString
     /// <summary>
     ///   Decrypts the contents of a RawByteString. This method is deprecated
     ///   and should be replaced by a variant expecting TBytes as source in
@@ -719,6 +752,19 @@ function ValidCipher(CipherClass: TDECCipherClass = nil): TDECCipherClass;
 /// </param>
 procedure SetDefaultCipherClass(CipherClass: TDECCipherClass);
 
+/// <summary>
+///   Provides information whether a certain block concatenation mode
+///   provides authentication functionality or not.
+/// </summary>
+/// <param name="BlockMode">
+///   Block mode to check fo authentication features
+/// </param>
+/// <returns>
+///   true if the selected block mode is one providing authentication features
+///   as well
+/// </returns>
+function IsAuthenticatedBlockMode(BlockMode: TCipherMode): Boolean;
+
 implementation
 
 uses
@@ -765,6 +811,11 @@ begin
   FDefaultCipherClass := CipherClass;
 end;
 
+function IsAuthenticatedBlockMode(BlockMode: TCipherMode): Boolean;
+begin
+  Result := BlockMode = cmGCM;
+end;
+
 { TDECCipher }
 
 constructor TDECCipher.Create;
@@ -789,6 +840,7 @@ begin
   // ReallocMemory instead of ReallocMem due to C++ compatibility as per 10.1 help
   FData                 := ReallocMemory(FData, FDataSize);
   FInitializationVector := @FData[0];
+  FInitVectorSize       := 0;
   FFeedback             := @FInitializationVector[FBufferSize];
   FBuffer               := @FFeedback[FBufferSize];
   FAdditionalBuffer     := @FBuffer[FBufferSize];
@@ -827,6 +879,7 @@ begin
       Done;
 
     FMode := Value;
+    InitMode;
   end;
 end;
 
@@ -859,14 +912,17 @@ begin
 end;
 
 procedure TDECCipher.Init(const Key; Size: Integer; const IVector; IVectorSize: Integer; IFiller: Byte);
+var
+  OriginalInitVector : TBytes;
 begin
-  FState := csNew;
+  FState          := csNew;
+  FInitVectorSize := IVectorSize;
   SecureErase;
 
   if (Size > Context.KeySize) and (not (ctNull in Context.CipherType)) then
     raise EDECCipherException.CreateRes(@sKeyMaterialTooLarge);
 
-  if IVectorSize > FBufferSize then
+  if (FInitVectorSize > FBufferSize) and (not (FMode = cmGCM)) then
     raise EDECCipherException.CreateRes(@sIVMaterialTooLarge);
 
   DoInit(Key, Size);
@@ -875,7 +931,13 @@ begin
     Move(FAdditionalBuffer^, FAdditionalBufferBackup^, FAdditionalBufferSize);
 
   FillChar(FInitializationVector^, FBufferSize, IFiller);
-  if IVectorSize = 0 then
+
+  SetLength(OriginalInitVector, IVectorSize);
+  if (IVectorSize > 0) then
+    Move(IVector, OriginalInitVector[0], IVectorSize);
+
+  // GCM needs same treatment as empty IV even if IV specified
+  if (IVectorSize = 0) or (FMode = cmGCM) then
   begin
     DoEncode(FInitializationVector, FInitializationVector, FBufferSize);
     if FAdditionalBufferBackup <> nil then
@@ -885,6 +947,8 @@ begin
   else
     Move(IVector, FInitializationVector^, IVectorSize);
 
+  OnAfterInitVectorInitialization(OriginalInitVector);
+
   Move(FInitializationVector^, FFeedback^, FBufferSize);
 
   FState := csInitialized;
@@ -892,7 +956,9 @@ end;
 
 procedure TDECCipher.Init(const Key: TBytes; const IVector: TBytes; IFiller: Byte = $FF);
 begin
-  if (Length(Key) = 0) and (not (ctNull in Context.CipherType)) then
+  // GCM allows empty key as the authentication still works
+  if (Length(Key) = 0) and (not (ctNull in Context.CipherType)) and
+     (not (FMode = cmGCM)) then
     raise EDECCipherException.CreateRes(@sNoKeyMaterialGiven);
 
   if IVector <> nil then
@@ -901,9 +967,13 @@ begin
     Init(Key[0], Length(Key), NullStr, 0, IFiller);
 end;
 
-procedure TDECCipher.Init(const Key: RawByteString; const IVector: RawByteString = ''; IFiller: Byte = $FF);
+procedure TDECCipher.Init(const Key     : RawByteString;
+                          const IVector : RawByteString = '';
+                          IFiller       : Byte = $FF);
 begin
-  if (Length(Key) = 0) and (not (ctNull in Context.CipherType)) then
+  // GCM allows empty key as the authentication still works
+  if (Length(Key) = 0) and (not (ctNull in Context.CipherType)) and
+     (not (FMode = cmGCM)) then
     raise EDECCipherException.CreateRes(@sNoKeyMaterialGiven);
 
   if Length(IVector) > 0 then
@@ -950,7 +1020,9 @@ end;
 {$IFNDEF NEXTGEN}
 procedure TDECCipher.Init(const Key, IVector: WideString; IFiller: Byte);
 begin
-  if (Length(Key) = 0) and (not (ctNull in Context.CipherType)) then
+  // GCM allows empty key as the authentication still works
+  if (Length(Key) = 0) and (not (ctNull in Context.CipherType)) and
+     (not (FMode = cmGCM)) then
     raise EDECCipherException.CreateRes(@sNoKeyMaterialGiven);
 
   if Length(IVector) > 0 then
@@ -969,6 +1041,11 @@ begin
     {$IFEND}
 end;
 {$ENDIF}
+
+function TDECCipher.IsAuthenticated: Boolean;
+begin
+  Result := IsAuthenticatedBlockMode(FMode);
+end;
 
 procedure TDECCipher.Done;
 begin
@@ -1080,16 +1157,21 @@ end;
 {$IFDEF RESTORE_OVERFLOWCHECKS}{$Q+}{$ENDIF}
 
 {$IFDEF DELPHIORBCB}
-procedure ModuleUnload(Instance: NativeInt);
+procedure ModuleUnload(Instance: NativeUInt);
 var // automaticaly deregistration/releasing
   i: Integer;
+  Items: TArray<TPair<Int64, TDECCLass>>;
 begin
-  if TDECCipher.ClassList <> nil then
+  // C++Builder calls this function for our own module, but we destroy the ClassList
+  // in that case in the finalization section anyway.
+  if (Instance <> HInstance) and
+     (TDECCipher.ClassList <> nil) and (TDECCipher.ClassList.Count > 0) then
   begin
-    for i := TDECCipher.ClassList.Count - 1 downto 0 do
+    Items := TDECCipher.ClassList.ToArray;
+    for i := Length(Items) - 1 downto 0 do
     begin
-      if NativeInt(FindClassHInstance(TClass(TDECCipher.ClassList[i]))) = Instance then
-        TDECCipher.ClassList.Remove(TDECCipher.ClassList[i].Identity);
+      if FindClassHInstance(Items[i].Value) = HINST(HInstance) then
+        TDECCipher.ClassList.Remove(Items[i].Key);
     end;
   end;
 end;

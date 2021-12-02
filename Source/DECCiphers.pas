@@ -467,8 +467,13 @@ type
     class function Context: TCipherContext; override;
   end;
 
-  TCipher_1DES = class(TDECFormattedCipher)
-  protected
+  /// <summary>
+  ///   Base class for all DES based ciphers to fix issues with calling
+  ///   inherited in DoInit, as all other DES based classes did inherit from
+  ///   TCipher_1DES and inherited called the DoInit of that as well...
+  /// </summary>
+  TCipher_DESBase = class(TDECFormattedCipher)
+  strict protected
     /// <summary>
     ///   Initialize the key, based on the key passed in
     /// </summary>
@@ -486,6 +491,10 @@ type
     ///   start index or the highest index  (= reverse)
     /// </param>
     procedure DoInitKey(const Data: array of Byte; Key: PUInt32Array; Reverse: Boolean);
+  end;
+
+  TCipher_1DES = class(TCipher_DESBase)
+  protected
     procedure DoInit(const Key; Size: Integer); override;
     procedure DoEncode(Source, Dest: Pointer; Size: Integer); override;
     procedure DoDecode(Source, Dest: Pointer; Size: Integer); override;
@@ -493,7 +502,7 @@ type
     class function Context: TCipherContext; override;
   end;
 
-  TCipher_2DES = class(TCipher_1DES)
+  TCipher_2DES = class(TCipher_DESBase)
   protected
     /// <summary>
     ///   Initialize the key, based on the key passed in
@@ -511,7 +520,7 @@ type
     class function Context: TCipherContext; override;
   end;
 
-  TCipher_3DES = class(TCipher_1DES)
+  TCipher_3DES = class(TCipher_DESBase)
   protected
     /// <summary>
     ///   Initialize the key, based on the key passed in
@@ -574,7 +583,6 @@ type
   TCipher_Cast128 = class(TDECFormattedCipher)
   private
     FRounds: Integer;
-    procedure SetRounds(Value: Integer);
   protected
     /// <summary>
     ///   Initialize the key, based on the key passed in
@@ -590,12 +598,6 @@ type
     procedure DoDecode(Source, Dest: Pointer; Size: Integer); override;
   public
     class function Context: TCipherContext; override;
-
-    /// <summary>
-    ///   Sets the number of rounds/times the algorithm is being applied to the
-    ///   data. Default value is 16 rounds.
-    /// </summary>
-    property Rounds: Integer read FRounds write SetRounds;
   end;
 
   TCipher_Gost = class(TDECFormattedCipher)
@@ -729,7 +731,8 @@ type
 
     /// <summary>
     ///   Sets the number of rounds/times the algorithm is being applied to the
-    ///   data. Range should be 8-16 and default is 12 rounds.
+    ///   data. Allowed range is 0-255, if you can choose we recommend a
+    ///   value > 16.
     /// </summary>
     property Rounds: Integer read FRounds write SetRounds;
   end;
@@ -797,7 +800,13 @@ type
     function Shark(D: TLong64; K: PLong64): TLong64;
     {$ELSE}
     function Transform(A: UInt64; Log, ALog: TLogArray): UInt64;
+    function SharkEncode(D: UInt64; K: PUInt64): UInt64;
     {$ENDIF}
+
+    procedure DoEncode(Source, Dest: Pointer; Size: Integer); override;
+    procedure DoDecode(Source, Dest: Pointer; Size: Integer); override;
+  public
+    class function Context: TCipherContext; override;
   end;
 
   TCipher_Shark = class(TCipher_SharkBase)
@@ -812,17 +821,15 @@ type
     ///   Size of the key passed in bytes.
     /// </param>
     procedure DoInit(const Key; Size: Integer); override;
-    procedure DoEncode(Source, Dest: Pointer; Size: Integer); override;
-    procedure DoDecode(Source, Dest: Pointer; Size: Integer); override;
   public
-    class function Context: TCipherContext; override;
+
   end;
 
   /// <remarks>
   ///   Do only use if backwards compatibility with old code is necessary as
   ///   this implementation is faulty!
   /// </remarks>
-  TCipher_Shark_DEC52 = class(TCipher_Shark)
+  TCipher_Shark_DEC52 = class(TCipher_SharkBase)
   protected
     /// <summary>
     ///   Initialize the key, based on the key passed in
@@ -950,7 +957,7 @@ end;
 
 procedure TCipher_Null.DoInit(const Key; Size: Integer);
 begin
-  // dummy
+  inherited;
 end;
 
 procedure TCipher_Null.DoEncode(Source, Dest: Pointer; Size: Integer);
@@ -1023,6 +1030,8 @@ begin
       S[I, J * 2 + 1] := SwapUInt32(B[1]);
     end;
   FillChar(B, SizeOf(B), 0);
+
+  inherited;
 end;
 
 procedure TCipher_Blowfish.DoEncode(Source, Dest: Pointer; Size: Integer);
@@ -1418,6 +1427,8 @@ begin
     SetupBox192
   else
     SetupBox256;
+
+  inherited;
 end;
 
 procedure TCipher_Twofish.DoEncode(Source, Dest: Pointer; Size: Integer);
@@ -1591,6 +1602,8 @@ begin
   A    := D[2];
   D[2] := D[1];
   D[1] := A;
+
+  inherited;
 end;
 
 function IDEAMul(X, Y: UInt32): UInt32;
@@ -1800,6 +1813,8 @@ begin
     K := @K[4];
   end;
   ProtectBuffer(X, SizeOf(X));
+
+  inherited;
 end;
 
 procedure TCipher_Cast256.DoEncode(Source, Dest: Pointer; Size: Integer);
@@ -2033,6 +2048,8 @@ begin
     K[I] := FixKey(K[I], K[I - 1]);
     Inc(I, 2);
   until I >= 37;
+
+  inherited;
 end;
 
 procedure TCipher_Mars.DoEncode(Source, Dest: Pointer; Size: Integer);
@@ -2357,6 +2374,8 @@ begin
   D[256] := 0;
   D[257] := 0;
   ProtectBuffer(K, SizeOf(K));
+
+  inherited;
 end;
 
 procedure TCipher_RC4.DoEncode(Source, Dest: Pointer; Size: Integer);
@@ -2458,6 +2477,8 @@ begin
     J := (J + 1) mod L;
   end;
   ProtectBuffer(K, SizeOf(K));
+
+  inherited;
 end;
 
 procedure TCipher_RC6.LimitRounds;
@@ -2851,6 +2872,8 @@ begin
   Move(Key, FAdditionalBuffer^, Size);
   BuildEncodeKey;
   BuildDecodeKey;
+
+  inherited;
 end;
 
 procedure TCipher_Rijndael.DoEncode(Source, Dest: Pointer; Size: Integer);
@@ -3044,6 +3067,8 @@ begin
   end;
 
   D[8] := E[0];
+
+  inherited;
 end;
 
 procedure TCipher_Square.DoEncode(Source, Dest: Pointer; Size: Integer);
@@ -3259,6 +3284,8 @@ begin
   P[1] := T[3] shr 16 and $FF;
   P[2] := T[3] shr  8 and $FF;
   ProtectBuffer(Init_State, SizeOf(Init_State));
+
+  inherited;
 end;
 
 procedure TCipher_SCOP.DoEncode(Source, Dest: Pointer; Size: Integer);
@@ -3313,8 +3340,6 @@ begin
 end;
 
 { TCipher_SCOP_DEC52 }
-
-{ TODO : The old failure needs to be restored again }
 
 class function TCipher_SCOP_DEC52.Context: TCipherContext;
 begin
@@ -3416,6 +3441,8 @@ begin
   P[1] := T[3] shr 16 and $FF;
   P[2] := T[3] shr  8 and $FF;
   ProtectBuffer(Init_State, SizeOf(Init_State));
+
+  inherited;
 end;
 
 procedure TCipher_SCOP_DEC52.DoEncode(Source, Dest: Pointer; Size: Integer);
@@ -3561,6 +3588,8 @@ begin
     SKey.Plain     := SKey.Cards[7];
     SKey.Cipher    := SKey.Cards[Sum];
   end;
+
+  inherited;
 end;
 
 procedure TCipher_Sapphire.DoEncode(Source, Dest: Pointer; Size: Integer);
@@ -3615,7 +3644,7 @@ begin
   end;
 end;
 
-{ TCipher_1DES }
+{ DES basics }
 
 procedure DES_Func(Source, Dest, Key: PUInt32Array);
 var
@@ -3668,19 +3697,7 @@ begin
   Dest[1] := SwapUInt32(L);
 end;
 
-class function TCipher_1DES.Context: TCipherContext;
-begin
-  Result.KeySize                     := 8;
-  Result.BlockSize                   := 8;
-  Result.BufferSize                  := 8;
-  Result.AdditionalBufferSize        := 32 * 4 * 2;
-  Result.NeedsAdditionalBufferBackup := False;
-  Result.MinRounds                   := 1;
-  Result.MaxRounds                   := 1;
-  Result.CipherType                  := [ctSymmetric, ctBlock];
-end;
-
-procedure TCipher_1DES.DoInitKey(const Data: array of Byte; Key: PUInt32Array; Reverse: Boolean);
+procedure TCipher_DESBase.DoInitKey(const Data: array of Byte; Key: PUInt32Array; Reverse: Boolean);
 const
   ROT: array[0..15] of Byte = (1, 2, 4, 6, 8, 10, 12, 14, 15, 17, 19, 21, 23, 25, 27, 28);
 var
@@ -3746,6 +3763,20 @@ begin
   ProtectBuffer(PC_R, SizeOf(PC_R));
 end;
 
+{ TCipher_1DES }
+
+class function TCipher_1DES.Context: TCipherContext;
+begin
+  Result.KeySize                     := 8;
+  Result.BlockSize                   := 8;
+  Result.BufferSize                  := 8;
+  Result.AdditionalBufferSize        := 32 * 4 * 2;
+  Result.NeedsAdditionalBufferBackup := False;
+  Result.MinRounds                   := 1;
+  Result.MaxRounds                   := 1;
+  Result.CipherType                  := [ctSymmetric, ctBlock];
+end;
+
 procedure TCipher_1DES.DoInit(const Key; Size: Integer);
 var
   K: array[0..7] of Byte;
@@ -3755,6 +3786,8 @@ begin
   DoInitKey(K, FAdditionalBuffer, False);
   DoInitKey(K, @PUInt32Array(FAdditionalBuffer)[32], True);
   ProtectBuffer(K, SizeOf(K));
+
+  inherited;
 end;
 
 procedure TCipher_1DES.DoEncode(Source, Dest: Pointer; Size: Integer);
@@ -3796,6 +3829,8 @@ begin
   DoInitKey(K[0], @P[64], True);
   DoInitKey(K[8], @P[96], False);
   ProtectBuffer(K, SizeOf(K));
+
+  inherited;
 end;
 
 procedure TCipher_2DES.DoEncode(Source, Dest: Pointer; Size: Integer);
@@ -3843,6 +3878,8 @@ begin
   DoInitKey(K[ 8], @P[128], False);
   DoInitKey(K[ 0], @P[160], True);
   ProtectBuffer(K, SizeOf(K));
+
+  inherited;
 end;
 
 procedure TCipher_3DES.DoEncode(Source, Dest: Pointer; Size: Integer);
@@ -4099,6 +4136,8 @@ begin
   P3WayKey.D_Key[2] := ReverseBits(B0);
   P3WayKey.D_Key[1] := ReverseBits(B1);
   P3WayKey.D_Key[0] := ReverseBits(B2);
+
+  inherited;
 end;
 
 procedure TCipher_3Way.DoEncode(Source, Dest: Pointer; Size: Integer);
@@ -4230,21 +4269,9 @@ begin
   Result.BufferSize                  := 8;
   Result.AdditionalBufferSize        := 128;
   Result.NeedsAdditionalBufferBackup := false;
-  Result.MinRounds                   := 1;
-  Result.MaxRounds                   := 256;
+  Result.MinRounds                   := 12;
+  Result.MaxRounds                   := 16;
   Result.CipherType                  := [ctSymmetric, ctBlock];
-end;
-
-procedure TCipher_Cast128.SetRounds(Value: Integer);
-begin
-  if Value <> FRounds then
-  begin
-    if not (FState in [csNew, csInitialized, csDone]) then
-      Done;
-    if (FState <> csNew) and (Value <= 0) then
-      Value := 16;
-    FRounds := Value;
-  end;
 end;
 
 procedure TCipher_Cast128.DoInit(const Key; Size: Integer);
@@ -4253,13 +4280,13 @@ var
   K: PUInt32Array;
   I: UInt32;
 begin
-  if FRounds <= 0 then
-  begin
-    if Size <= 10 then
-      FRounds := 12
-    else
-      FRounds := 16;
-  end;
+  // as per rfc2144 the number of rounds is 12 for key sizes <= 80 bit,
+  // otherwise 16
+  if Size <= 10 then
+    FRounds := 12
+  else
+    FRounds := 16;
+
   K := FAdditionalBuffer;
   FillChar(X, SizeOf(X), 0);
   Move(Key, X, Size);
@@ -4399,6 +4426,8 @@ begin
   ProtectBuffer(X, SizeOf(X));
   ProtectBuffer(Z, SizeOf(Z));
   ProtectBuffer(T, SizeOf(T));
+
+  inherited;
 end;
 
 procedure TCipher_Cast128.DoEncode(Source, Dest: Pointer; Size: Integer);
@@ -4547,6 +4576,8 @@ end;
 procedure TCipher_Gost.DoInit(const Key; Size: Integer);
 begin
   Move(Key, FAdditionalBuffer^, Size);
+
+  inherited;
 end;
 
 procedure TCipher_Gost.DoEncode(Source, Dest: Pointer; Size: Integer);
@@ -4737,6 +4768,8 @@ begin
   end;
 
   ProtectBuffer(K, SizeOf(K));
+
+  inherited;
 end;
 
 procedure TCipher_Misty.DoEncode(Source, Dest: Pointer; Size: Integer);
@@ -4873,6 +4906,8 @@ begin
   until False;
 
   ProtectBuffer(K, SizeOf(K));
+
+  inherited;
 end;
 
 procedure TCipher_NewDES.DoEncode(Source, Dest: Pointer; Size: Integer);
@@ -4928,6 +4963,8 @@ begin
   end;
 
   ProtectBuffer(K, SizeOf(K));
+
+  inherited;
 end;
 
 procedure TCipher_Q128.DoEncode(Source, Dest: Pointer; Size: Integer);
@@ -5125,6 +5162,8 @@ begin
   K[128 - L] := RC2_Data[K[128 - L] and Mask];
   for I := 127 - L downto 0 do
      K[I] := RC2_Data[K[I + 1] xor K[I + L]];
+
+  inherited;
 end;
 
 procedure TCipher_RC2.DoEncode(Source, Dest: Pointer; Size: Integer);
@@ -5202,7 +5241,7 @@ begin
   Result.BufferSize                  := 8;
   Result.AdditionalBufferSize        := 136;
   Result.NeedsAdditionalBufferBackup := false;
-  Result.MinRounds                   := 1;
+  Result.MinRounds                   := 0;
   Result.MaxRounds                   := 256;
   Result.CipherType                  := [ctSymmetric, ctBlock];
 end;
@@ -5213,8 +5252,13 @@ begin
   begin
     if not (FState in [csNew, csInitialized, csDone]) then
       Done;
-    if Value <= 0 then
+
+    if Value < 0 then
       Value := 12;
+
+    if (Value > Context.MaxRounds) then
+      Value := Context.MaxRounds;
+
     FRounds := Value;
   end;
 end;
@@ -5261,6 +5305,8 @@ begin
     J := (J + 1) mod L;
   end;
   ProtectBuffer(K, SizeOf(K));
+
+  inherited;
 end;
 
 procedure TCipher_RC5.DoEncode(Source, Dest: Pointer; Size: Integer);
@@ -5450,6 +5496,8 @@ begin
     end;
   InitTab;
   InitKey;
+
+  inherited;
 end;
 
 procedure TCipher_SAFER.DoEncode(Source, Dest: Pointer; Size: Integer);
@@ -5587,6 +5635,11 @@ end;
 
 { TCipher_SharkBase }
 
+const
+  SHARK_ROOT      = $01F5; // GF(256) polynomial x^8 + x^7 + x^6 + x^5 + x^4 + x^2 + 1
+  SHARK_ROUNDS    = 6;
+  SHARK_ROUNDKEYS = SHARK_ROUNDS + 1;
+
 {$IFNDEF CPU64BITS}
 function TCipher_SharkBase.Shark(D: TLong64; K: PLong64): TLong64;
 var
@@ -5630,10 +5683,13 @@ begin
   Result.L := D.L xor K.L;
   Result.R := D.R xor K.R;
 end;
+{$ENDIF}
 
+{$IFNDEF CPU64BITS}
 function TCipher_SharkBase.Transform(A: TLong64; Log, ALog: TLogArray): TLong64;
   function Mul(A, B: Integer): Byte;
   begin
+    // GF(256) multiplication via logarithm tables
     Result := ALog[(Log[A] + Log[B]) mod 255];
   end;
 
@@ -5644,12 +5700,14 @@ begin
   Move(A.R, K[0], 4);
   Move(A.L, K[4], 4);
   SwapUInt32Buffer(K, K, 2);
+
   for I := 0 to 7 do
   begin
     T[I] := Mul(Shark_I[I, 0], K[0]);
     for J := 1 to 7 do
       T[I] := T[I] xor Mul(Shark_I[I, J], K[J]);
   end;
+
   Result.L := T[0];
   Result.R := 0;
   for I := 1 to 7 do
@@ -5658,35 +5716,36 @@ begin
     Result.L := Result.L shl 8 xor T[I];
   end;
 end;
+
 {$ELSE CPU64BITS}
 function TCipher_SharkBase.Transform(A: UInt64; Log, ALog: TLogArray): UInt64;
-var
-  I, J: Integer;
-  K, T: array[0..7] of Byte;
-
-  function Mul(A, B: Byte): Byte;
+  function Mul(A, B: Integer): Byte;
   begin
     // GF(256) multiplication via logarithm tables
     Result := ALog[(Log[A] + Log[B]) mod 255];
   end;
+
+var
+  I, J: Byte;
+  K, T: array[0..7] of Byte;
 begin
   for I := 0 to 7 do
     K[I] := A shr (56 - 8 * i);
+
   for I := 0 to 7 do
   begin
     T[I] := Mul(Shark_I[I, 0], K[0]);
     for J := 1 to 7 do
       T[I] := T[I] xor Mul(Shark_I[I, J], K[J]);
   end;
+
   Result := T[0];
   for I := 1 to 7 do
     Result := (Result shl 8) xor T[I];
 end;
 {$ENDIF}
 
-{ TCipher_Shark }
-
-class function TCipher_Shark.Context: TCipherContext;
+class function TCipher_SharkBase.Context: TCipherContext;
 begin
   Result.KeySize                     := 16;
   Result.BlockSize                   := 8;
@@ -5697,6 +5756,97 @@ begin
   Result.MaxRounds                   := 1;
   Result.CipherType                  := [ctSymmetric, ctBlock];
 end;
+
+
+procedure TCipher_SharkBase.DoEncode(Source, Dest: Pointer; Size: Integer);
+{$IFNDEF CPU64BITS}
+var
+  I: Integer;
+  T, L, R: UInt32;
+  K: PUInt32Array;
+begin
+  Assert(Size = Context.BlockSize);
+
+  K := FAdditionalBuffer;
+  L := PLong64(Source).L;
+  R := PLong64(Source).R;
+  for I := 0 to 4 do
+  begin
+    L := L xor K[I * 2 + 0];
+    R := R xor K[I * 2 + 1];
+    T := Shark_CE[0, R shr 23 and $1FE] xor
+         Shark_CE[1, R shr 15 and $1FE] xor
+         Shark_CE[2, R shr  7 and $1FE] xor
+         Shark_CE[3, R shl  1 and $1FE] xor
+         Shark_CE[4, L shr 23 and $1FE] xor
+         Shark_CE[5, L shr 15 and $1FE] xor
+         Shark_CE[6, L shr  7 and $1FE] xor
+         Shark_CE[7, L shl  1 and $1FE];
+    R := Shark_CE[0, R shr 23 and $1FE or 1] xor
+         Shark_CE[1, R shr 15 and $1FE or 1] xor
+         Shark_CE[2, R shr  7 and $1FE or 1] xor
+         Shark_CE[3, R shl  1 and $1FE or 1] xor
+         Shark_CE[4, L shr 23 and $1FE or 1] xor
+         Shark_CE[5, L shr 15 and $1FE or 1] xor
+         Shark_CE[6, L shr  7 and $1FE or 1] xor
+         Shark_CE[7, L shl  1 and $1FE or 1];
+    L := T;
+  end;
+  L := L xor K[10];
+  R := R xor K[11];
+  L := UInt32(Shark_SE[L shr 24        ]) shl 24 xor
+       UInt32(Shark_SE[L shr 16 and $FF]) shl 16 xor
+       UInt32(Shark_SE[L shr  8 and $FF]) shl  8 xor
+       UInt32(Shark_SE[L        and $FF]);
+  R := UInt32(Shark_SE[R shr 24        ]) shl 24 xor
+       UInt32(Shark_SE[R shr 16 and $FF]) shl 16 xor
+       UInt32(Shark_SE[R shr  8 and $FF]) shl  8 xor
+       UInt32(Shark_SE[R        and $FF]);
+  PLong64(Dest).L := L xor K[12];
+  PLong64(Dest).R := R xor K[13];
+{$ELSE CPU64BITS}
+begin
+  // 64 bit
+  Assert(Size = Context.BufferSize);
+
+  PUInt64(Dest)^ := SharkEncode(PUInt64(Source)^, FAdditionalBuffer);
+{$ENDIF}
+end;
+
+{$IFDEF CPU64BITS}
+function TCipher_SharkBase.SharkEncode(D: UInt64; K: PUInt64): UInt64;
+var
+  R: Integer;
+begin
+  for R := 1 to SHARK_ROUNDS - 1 do
+  begin
+    D := D xor K^;
+    Inc(K);
+    D := Shark_CE[0, D shr 56 and $FF] xor
+         Shark_CE[1, D shr 48 and $FF] xor
+         Shark_CE[2, D shr 40 and $FF] xor
+         Shark_CE[3, D shr 32 and $FF] xor
+         Shark_CE[4, D shr 24 and $FF] xor
+         Shark_CE[5, D shr 16 and $FF] xor
+         Shark_CE[6, D shr 8  and $FF] xor
+         Shark_CE[7, D        and $FF];
+  end;
+  D := D xor K^;
+  Inc(K);
+  D := UInt64(Shark_SE[D shr 56 and $FF]) shl 56 xor
+       UInt64(Shark_SE[D shr 48 and $FF]) shl 48 xor
+       UInt64(Shark_SE[D shr 40 and $FF]) shl 40 xor
+       UInt64(Shark_SE[D shr 32 and $FF]) shl 32 xor
+       UInt64(Shark_SE[D shr 24 and $FF]) shl 24 xor
+       UInt64(Shark_SE[D shr 16 and $FF]) shl 16 xor
+       UInt64(Shark_SE[D shr  8 and $FF]) shl  8 xor
+       UInt64(Shark_SE[D        and $FF]);
+  Result := D xor K^;
+end;
+{$ENDIF}
+
+
+{ TCipher_Shark }
 
 {$IFNDEF CPU64BITS}
 procedure TCipher_Shark.DoInit(const Key; Size: Integer);
@@ -5712,7 +5862,7 @@ var
     begin
       J := ALog[I - 1] shl 1;
       if J and $100 <> 0 then
-        J := J xor $01F5;
+        J := J xor SHARK_ROOT;
       ALog[I] := J;
     end;
     Log[0] := 0;
@@ -5767,56 +5917,13 @@ begin
   ProtectBuffer(T, SizeOf(T));
   ProtectBuffer(A, SizeOf(A));
   ProtectBuffer(K, SizeOf(K));
+
+  inherited;
 end;
+{$ENDIF}
 
-procedure TCipher_Shark.DoEncode(Source, Dest: Pointer; Size: Integer);
-var
-  I: Integer;
-  T, L, R: UInt32;
-  K: PUInt32Array;
-begin
-  Assert(Size = Context.BlockSize);
-
-  K := FAdditionalBuffer;
-  L := PLong64(Source).L;
-  R := PLong64(Source).R;
-  for I := 0 to 4 do
-  begin
-    L := L xor K[I * 2 + 0];
-    R := R xor K[I * 2 + 1];
-    T := Shark_CE[0, R shr 23 and $1FE] xor
-         Shark_CE[1, R shr 15 and $1FE] xor
-         Shark_CE[2, R shr  7 and $1FE] xor
-         Shark_CE[3, R shl  1 and $1FE] xor
-         Shark_CE[4, L shr 23 and $1FE] xor
-         Shark_CE[5, L shr 15 and $1FE] xor
-         Shark_CE[6, L shr  7 and $1FE] xor
-         Shark_CE[7, L shl  1 and $1FE];
-    R := Shark_CE[0, R shr 23 and $1FE or 1] xor
-         Shark_CE[1, R shr 15 and $1FE or 1] xor
-         Shark_CE[2, R shr  7 and $1FE or 1] xor
-         Shark_CE[3, R shl  1 and $1FE or 1] xor
-         Shark_CE[4, L shr 23 and $1FE or 1] xor
-         Shark_CE[5, L shr 15 and $1FE or 1] xor
-         Shark_CE[6, L shr  7 and $1FE or 1] xor
-         Shark_CE[7, L shl  1 and $1FE or 1];
-    L := T;
-  end;
-  L := L xor K[10];
-  R := R xor K[11];
-  L := UInt32(Shark_SE[L shr 24        ]) shl 24 xor
-       UInt32(Shark_SE[L shr 16 and $FF]) shl 16 xor
-       UInt32(Shark_SE[L shr  8 and $FF]) shl  8 xor
-       UInt32(Shark_SE[L        and $FF]);
-  R := UInt32(Shark_SE[R shr 24        ]) shl 24 xor
-       UInt32(Shark_SE[R shr 16 and $FF]) shl 16 xor
-       UInt32(Shark_SE[R shr  8 and $FF]) shl  8 xor
-       UInt32(Shark_SE[R        and $FF]);
-  PLong64(Dest).L := L xor K[12];
-  PLong64(Dest).R := R xor K[13];
-end;
-
-procedure TCipher_Shark.DoDecode(Source, Dest: Pointer; Size: Integer);
+{$IFNDEF CPU64BITS}
+procedure TCipher_SharkBase.DoDecode(Source, Dest: Pointer; Size: Integer);
 var
   I: Integer;
   T, R, L: UInt32;
@@ -5864,42 +5971,6 @@ begin
 end;
 
 {$ELSE CPU64BITS}
-
-const
-  SHARK_ROUNDS = 6;
-  SHARK_ROUNDKEYS = SHARK_ROUNDS + 1;
-  SHARK_ROOT = $1F5; // GF(256) polynomial x^8 + x^7 + x^6 + x^5 + x^4 + x^2 + 1
-
-function SharkEncode(D: UInt64; K: PUInt64): UInt64;
-var
-  R: Integer;
-begin
-  for R := 1 to SHARK_ROUNDS - 1 do
-  begin
-    D := D xor K^;
-    Inc(K);
-    D := Shark_CE[0, D shr 56 and $FF] xor
-         Shark_CE[1, D shr 48 and $FF] xor
-         Shark_CE[2, D shr 40 and $FF] xor
-         Shark_CE[3, D shr 32 and $FF] xor
-         Shark_CE[4, D shr 24 and $FF] xor
-         Shark_CE[5, D shr 16 and $FF] xor
-         Shark_CE[6, D shr 8  and $FF] xor
-         Shark_CE[7, D        and $FF];
-  end;
-  D := D xor K^;
-  Inc(K);
-  D := UInt64(Shark_SE[D shr 56 and $FF]) shl 56 xor
-       UInt64(Shark_SE[D shr 48 and $FF]) shl 48 xor
-       UInt64(Shark_SE[D shr 40 and $FF]) shl 40 xor
-       UInt64(Shark_SE[D shr 32 and $FF]) shl 32 xor
-       UInt64(Shark_SE[D shr 24 and $FF]) shl 24 xor
-       UInt64(Shark_SE[D shr 16 and $FF]) shl 16 xor
-       UInt64(Shark_SE[D shr  8 and $FF]) shl  8 xor
-       UInt64(Shark_SE[D        and $FF]);
-  Result := D xor K^;
-end;
-
 procedure TCipher_Shark.DoInit(const Key; Size: Integer);
 var
   Log, ALog: TLogArray;
@@ -5963,16 +6034,11 @@ begin
   ProtectBuffer(T, SizeOf(T));
   ProtectBuffer(A, SizeOf(A));
   ProtectBuffer(K, SizeOf(K));
+
+  inherited;
 end;
 
-procedure TCipher_Shark.DoEncode(Source, Dest: Pointer; Size: Integer);
-begin
-  Assert(Size = Context.BufferSize);
-
-  PUInt64(Dest)^ := SharkEncode(PUInt64(Source)^, FAdditionalBuffer);
-end;
-
-procedure TCipher_Shark.DoDecode(Source, Dest: Pointer; Size: Integer);
+procedure TCipher_SharkBase.DoDecode(Source, Dest: Pointer; Size: Integer);
 var
   R: Integer;
   D: UInt64;
@@ -6012,7 +6078,7 @@ end;
 
 { TCipher_Shark_DEC52 }
 
-{$IFNDEF CPU64BITS}
+
 procedure TCipher_Shark_DEC52.DoInit(const Key; Size: Integer);
 var
   Log, ALog: TLogArray;
@@ -6021,21 +6087,23 @@ var
   var
     I, J: Word;
   begin
+    // Generate GF(256) anti-logarithm and logarithm tables
     ALog[0] := 1;
     for I := 1 to 255 do
     begin
       J := ALog[I - 1] shl 1;
       if J and $100 <> 0 then
-        J := J xor $01F5;
+        J := J xor SHARK_ROOT;
       ALog[I] := J;
     end;
     for I := 1 to 254 do
       Log[ALog[I]] := I;
   end;
 
+{$IFNDEF CPU64BITS}
 var
-  T: array[0..6] of TLong64;
-  A: array[0..6] of TLong64;
+  T: array[0..SHARK_ROUNDS] of TLong64;
+  A: array[0..SHARK_ROUNDS] of TLong64;
   K: array[0..15] of Byte;
   I, J, R: Byte;
   E, D: PLong64Array;
@@ -6080,31 +6148,9 @@ begin
   ProtectBuffer(T, SizeOf(T));
   ProtectBuffer(A, SizeOf(A));
   ProtectBuffer(K, SizeOf(K));
-end;
 
-{$ELSE CPU64BITS}
-
-procedure TCipher_Shark_DEC52.DoInit(const Key; Size: Integer);
-var
-  Log, ALog: TLogArray;
-
-  procedure InitLog;
-  var
-    I, J: Word;
-  begin
-    // Generate GF(256) anti-logarithm and logarithm tables
-    ALog[0] := 1;
-    for I := 1 to 255 do
-    begin
-      J := ALog[I - 1] shl 1;
-      if J and $100 <> 0 then
-        J := J xor SHARK_ROOT;
-      ALog[I] := J;
-    end;
-    for I := 1 to 254 do
-      Log[ALog[I]] := I;
-  end;
-
+  inherited;
+  {$ELSE}
 var
   T: array[0..SHARK_ROUNDS] of UInt64;
   A: array[0..SHARK_ROUNDKEYS-1] of UInt64;
@@ -6146,8 +6192,10 @@ begin
   ProtectBuffer(T, SizeOf(T));
   ProtectBuffer(A, SizeOf(A));
   ProtectBuffer(K, SizeOf(K));
+
+  inherited;
+  {$ENDIF}
 end;
-{$ENDIF}
 
 { TCipher_Skipjack }
 
@@ -6179,6 +6227,8 @@ begin
       Inc(D);
     end;
   ProtectBuffer(K, SizeOf(K));
+
+  inherited;
 end;
 
 procedure TCipher_Skipjack.DoEncode(Source, Dest: Pointer; Size: Integer);
@@ -6374,11 +6424,11 @@ procedure TCipher_TEA.SetRounds(Value: Integer);
 begin
   if not (FState in [csNew, csInitialized, csDone]) then
     Done;
-  if Value < 16 then
-    Value := 16
+  if Value < Context.MinRounds then
+    Value := Context.MinRounds
   else
-  if Value > 256 then
-    Value := 256;
+  if Value > Context.MaxRounds then
+    Value := Context.MaxRounds;
   FRounds := Value;
 end;
 
@@ -6386,6 +6436,8 @@ procedure TCipher_TEA.DoInit(const Key; Size: Integer);
 begin
   Move(Key, FAdditionalBuffer^, Size);
   SetRounds(FRounds);
+
+  inherited;
 end;
 
 procedure TCipher_TEA.DoEncode(Source, Dest: Pointer; Size: Integer);

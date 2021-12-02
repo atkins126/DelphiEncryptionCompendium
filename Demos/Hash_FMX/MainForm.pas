@@ -23,7 +23,7 @@ uses
   System.SysUtils, System.Types, System.UITypes, System.Classes, System.Variants,
   FMX.Types, FMX.Controls, FMX.Forms, FMX.Graphics, FMX.Dialogs, FMX.StdCtrls,
   FMX.Controls.Presentation, FMX.ScrollBox, FMX.Memo, FMX.Layouts, FMX.ListBox,
-  FMX.Edit;
+  FMX.Edit, DECFormatBase;
 
 type
   TFormMain = class(TForm)
@@ -88,6 +88,10 @@ type
     ///   guard agains having nothing selected.
     /// </returns>
     function  GetSelectedHashClassName: string;
+    /// <summary>
+    ///   Determine and return the selected class for input format treatment
+    /// </summary>
+    function GetSelectedInputFormattingClass:TDECFormatClass;
   public
   end;
 
@@ -98,7 +102,7 @@ implementation
 
 uses
   DECBaseClass, DECHashBase, DECHash, DECHashAuthentication, DECHashInterface,
-  DECFormatBase,  DECFormat, DECUtil,
+  DECFormat, DECUtil,
   Generics.Collections, FMX.Platform
   {$IFDEF Android}
   ,
@@ -122,11 +126,8 @@ var
   Rounds               : UInt8;
 begin
   if ComboBoxInputFormatting.ItemIndex >= 0 then
-  begin
-    // Find the class type of the selected formatting class and create an instance of it
-    InputFormatting := TDECFormat.ClassByName(
-      ComboBoxInputFormatting.Items[ComboBoxInputFormatting.ItemIndex]);
-  end
+    // Find the class type of the selected formatting class
+    InputFormatting := GetSelectedInputFormattingClass
   else
   begin
     ShowErrorMessage('No input format selected');
@@ -135,7 +136,7 @@ begin
 
   if ComboBoxOutputFormatting.ItemIndex >= 0 then
   begin
-    // Find the class type of the selected formatting class and create an instance of it
+    // Find the class type of the selected formatting class
     OutputFormatting := TDECFormat.ClassByName(
       ComboBoxOutputFormatting.Items[ComboBoxOutputFormatting.ItemIndex]);
   end
@@ -286,9 +287,16 @@ begin
 end;
 
 procedure TFormMain.EditInputChangeTracking(Sender: TObject);
+var
+  InputFormatting : TDECFormatClass;
 begin
   if CheckBoxLiveCalc.IsChecked then
-    ButtonCalcClick(self);
+  begin
+    // Check if input is valid
+    InputFormatting := GetSelectedInputFormattingClass;
+    if InputFormatting.IsValid(RawByteString(EditInput.Text)) then
+      ButtonCalcClick(self);
+  end;
 end;
 
 procedure TFormMain.EditInputKeyUp(Sender: TObject; var Key: Word;
@@ -391,6 +399,13 @@ end;
 function TFormMain.GetSelectedHashClassName: string;
 begin
   Result := 'THash_' + ComboBoxHashFunction.Items[ComboBoxHashFunction.ItemIndex];
+end;
+
+function TFormMain.GetSelectedInputFormattingClass: TDECFormatClass;
+begin
+  // Find the class type of the selected formatting class and create an instance of it
+  Result := TDECFormat.ClassByName(
+    ComboBoxInputFormatting.Items[ComboBoxInputFormatting.ItemIndex]);
 end;
 
 end.
