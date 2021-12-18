@@ -92,6 +92,21 @@ type
     procedure TestIncrement8;
   end;
 
+  {$IFDEF DUnitX} [TestFixture] {$ENDIF}
+  // class for checking some exceptions which get raised for C++ Builder
+  THash_TestCPPBuilderExceptions = class(TTestCase)
+  strict protected
+  public
+    procedure SetUp; override;
+    procedure TearDown; override;
+
+    procedure DoTestBlockSizeException;
+    procedure DoTestDigestSizeException;
+  published
+    procedure TestBlockSizeException;
+    procedure TestDigestSizeException;
+  end;
+
   /// <summary>
   ///   Base class for all hash tests, provides generalized test methods so that
   ///   concrete classes only need to provide the actual test data.
@@ -128,6 +143,11 @@ type
     procedure DoTestCalcBuffer(HashClass:TDECHash); virtual;
     procedure DoTestCalcBytes(HashClass:TDECHash); virtual;
     procedure DoTestCalcStream(HashClass:TDECHash); virtual;
+    // variant for the overload which doesn't return the calculated hash
+    procedure DoTestCalcStreamNoDone(HashClass: TDECHash); virtual;
+    // variant for the overload which doesn't return the calculated hash and which
+    // tries to splitt the input data into multiple calls
+    procedure DoTestCalcStreamNoDoneMulti(HashClass: TDECHash); virtual;
     procedure DoTestCalcStreamRawByteString(HashClass: TDECHash); virtual;
     procedure DoTestCalcUnicodeString(HashClass:TDECHash); virtual;
     procedure DoTestCalcRawByteString(HashClass:TDECHash); virtual;
@@ -151,6 +171,8 @@ type
     procedure TestCalcStream;
     procedure TestCalcStreamRawByteString;
     procedure TestCalcRawByteString;
+    procedure TestCalcStreamNoDone;
+    procedure TestCalcStreamNoDoneMulti;
     procedure TestCalcUnicodeString;
     procedure TestIsPasswordHash;
     procedure TestGetPaddingByte;
@@ -599,7 +621,7 @@ implementation
 
 uses
   System.TypInfo, System.Rtti,
-  DECFormat;
+  DECHashInterface, DECFormat;
 
 procedure TestTHash_MD2.SetUp;
 var
@@ -5389,6 +5411,178 @@ begin
                                 ProgressCalled := true;
                               end);
 
+        if (i = FTestData.Count-1) then
+          StreamBufferSize := BufSize;
+
+        CheckEquals(FTestData[i].ExpectedOutput,
+                    BytesToRawString(TFormat_HEXL.Encode(Hash)),
+                    'Index: ' + IntToStr(i) + ' - expected: <' +
+                    string(FTestData[i].ExpectedOutput) + '> but was: <' +
+                    string(BytesToRawString(TFormat_HEXL.Encode(Hash))) + '>');
+
+        CheckEquals(true, ProgressCalled, 'Progress event not called');
+      end;
+  finally
+    Stream.Free;
+  end;
+end;
+
+procedure THash_TestBase.DoTestCalcStreamNoDone(HashClass: TDECHash);
+var
+  Stream         : TMemoryStream;
+  i              : Integer;
+  Buf            : TBytes;
+  Hash           : TBytes;
+  ProgressCalled : Boolean;
+  BufSize        : Integer;
+begin
+  Stream  := TMemoryStream.Create;
+  BufSize := 0;
+
+  try
+    for i := 0 to FTestData.Count-1 do
+      begin
+        Buf := BytesOf(FTestData[i].InputData);
+        Stream.Clear;
+        {$IF CompilerVersion >= 25.0}
+        Stream.Write(Buf, Length(Buf));
+        {$ELSE}
+        if Length(Buf) > 0 then
+          Stream.Write(Buf[0], Length(Buf));
+        {$IFEND}
+        Stream.Position := 0;
+
+        ConfigHashClass(HashClass, i);
+
+        // for the last test do set a negative value for the stream buffer size
+        // in order to test that the default set within CalcStream works
+        if (i = FTestData.Count-1) then
+        begin
+          BufSize          := StreamBufferSize;
+          StreamBufferSize := -1;
+        end;
+
+        ProgressCalled := false;
+        HashClass.Init;
+        HashClass.CalcStream(Stream, Length(Buf),
+                              procedure(Size, Pos: Int64; State: TDECProgressState)
+                              begin
+                                ProgressCalled := true;
+                              end, true);
+
+        Hash := HashClass.DigestAsBytes;
+
+        if (i = FTestData.Count-1) then
+          StreamBufferSize := BufSize;
+
+        CheckEquals(FTestData[i].ExpectedOutput,
+                    BytesToRawString(TFormat_HEXL.Encode(Hash)),
+                    'Index: ' + IntToStr(i) + ' - expected: <' +
+                    string(FTestData[i].ExpectedOutput) + '> but was: <' +
+                    string(BytesToRawString(TFormat_HEXL.Encode(Hash))) + '>');
+
+        CheckEquals(true, ProgressCalled, 'Progress event not called');
+
+        ProgressCalled := false;
+        Stream.Seek(0, TSeekOrigin.soBeginning);
+        HashClass.Init;
+        HashClass.CalcStream(Stream, -1,
+                              procedure(Size, Pos: Int64; State: TDECProgressState)
+                              begin
+                                ProgressCalled := true;
+                              end, true);
+
+        Hash := HashClass.DigestAsBytes;
+
+        if (i = FTestData.Count-1) then
+          StreamBufferSize := BufSize;
+
+        CheckEquals(FTestData[i].ExpectedOutput,
+                    BytesToRawString(TFormat_HEXL.Encode(Hash)),
+                    'Index: ' + IntToStr(i) + ' - expected: <' +
+                    string(FTestData[i].ExpectedOutput) + '> but was: <' +
+                    string(BytesToRawString(TFormat_HEXL.Encode(Hash))) + '>');
+
+        CheckEquals(true, ProgressCalled, 'Progress event not called');
+      end;
+  finally
+    Stream.Free;
+  end;
+end;
+
+procedure THash_TestBase.DoTestCalcStreamNoDoneMulti(HashClass: TDECHash);
+var
+  Stream         : TMemoryStream;
+  i, n           : Integer;
+  Buf            : TBytes;
+  Hash           : TBytes;
+  ProgressCalled : Boolean;
+  BufSize        : Integer;
+  Count          : Integer;
+  IsLastByte     : Boolean;
+  Idx, CopyCount : Integer;
+begin
+  Stream  := TMemoryStream.Create;
+  BufSize := 0;
+
+  try
+    for i := 0 to FTestData.Count-1 do
+      begin
+        Buf := BytesOf(FTestData[i].InputData);
+        ConfigHashClass(HashClass, i);
+        HashClass.Init;
+
+        // for the last test do set a negative value for the stream buffer size
+        // in order to test that the default set within CalcStream works
+        if (i = FTestData.Count-1) then
+        begin
+          BufSize          := StreamBufferSize;
+          StreamBufferSize := -1;
+        end;
+
+        Count := Length(Buf);
+        Stream.Clear;
+
+        n := 0;
+        idx := 0;
+        CopyCount := 1;
+        while (n <= Count - 1) do
+        begin
+          Stream.Write(Buf[idx], CopyCount);
+          Stream.Seek(-CopyCount, TSeekOrigin.soCurrent);
+
+          IsLastByte := not (Count-n > 1);
+
+          ProgressCalled := false;
+          HashClass.CalcStream(Stream, CopyCount,
+                                procedure(Size, Pos: Int64; State: TDECProgressState)
+                                begin
+                                  ProgressCalled := true;
+                                end, IsLastByte);
+
+          inc(idx, CopyCount);
+
+          if ((n + 4) <= (Count - 1)) then
+          begin
+            inc(n, 4);
+            CopyCount := 4;
+          end
+          else
+          begin
+            inc(n, 1);
+            CopyCount := 1;
+          end;
+        end;
+
+        // if we have empty input something still might be needed to be done
+        if (Count = 0) then
+          HashClass.CalcStream(Stream, 0,
+                                procedure(Size, Pos: Int64; State: TDECProgressState)
+                                begin
+                                  ProgressCalled := true;
+                                end, true);
+
+        Hash := HashClass.DigestAsBytes;
 
         if (i = FTestData.Count-1) then
           StreamBufferSize := BufSize;
@@ -5532,6 +5726,17 @@ end;
 procedure THash_TestBase.TestCalcStream;
 begin
   DoTestCalcStream(FHash);
+end;
+
+procedure THash_TestBase.TestCalcStreamNoDone;
+
+begin
+  DoTestCalcStreamNoDone(FHash);
+end;
+
+procedure THash_TestBase.TestCalcStreamNoDoneMulti;
+begin
+  DoTestCalcStreamNoDoneMulti(FHash);
 end;
 
 procedure THash_TestBase.TestCalcStreamRawByteString;
@@ -5705,10 +5910,55 @@ begin
   end;
 end;
 
+{ THash_TestCPPBuilderExceptions }
+
+procedure THash_TestCPPBuilderExceptions.DoTestBlockSizeException;
+var
+  Result : UInt32;
+begin
+  Result := TDECHash.BlockSize;
+  CheckEquals(0, Result, 'Dummy check which should never get reached due to ' +
+                         'the exception being raised before');
+end;
+
+procedure THash_TestCPPBuilderExceptions.DoTestDigestSizeException;
+var
+  Result : UInt32;
+begin
+  Result := TDECHash.DigestSize;
+  CheckEquals(0, Result, 'Dummy check which should never get reached due to ' +
+                         'the exception being raised before');
+end;
+
+procedure THash_TestCPPBuilderExceptions.SetUp;
+begin
+  // Empty on purpose as only class functions are tested
+  inherited;
+end;
+
+procedure THash_TestCPPBuilderExceptions.TearDown;
+begin
+  // Empty on purpose as only class functions are tested
+  inherited;
+end;
+
+procedure THash_TestCPPBuilderExceptions.TestBlockSizeException;
+begin
+  CheckException(DoTestBlockSizeException, EDECAbstractError,
+                 'Abstract error raised for C++ Builder not detected');
+end;
+
+procedure THash_TestCPPBuilderExceptions.TestDigestSizeException;
+begin
+  CheckException(DoTestDigestSizeException, EDECAbstractError,
+                 'Abstract error raised for C++ Builder not detected');
+end;
+
 initialization
   // Register any test cases with the test runner
   {$IFDEF DUnitX}
   TDUnitX.RegisterTestFixture(THash_TestIncrement8);
+  TDUnitX.RegisterTestFixture(THash_TestCPPBuilderExceptions);
   TDUnitX.RegisterTestFixture(TestTDECHash);
   TDUnitX.RegisterTestFixture(TestTHash_MD2);
   TDUnitX.RegisterTestFixture(TestTHash_MD4);
@@ -5750,6 +6000,7 @@ initialization
   TDUnitX.RegisterTestFixture(TestTHash_Sapphire);
   {$ELSE}
   RegisterTests('DECHash', [THash_TestIncrement8.Suite,
+                            THash_TestCPPBuilderExceptions.Suite,
                             TestTDECHash.Suite,
                             TestTHash_MD2.Suite,
                             TestTHash_MD4.Suite,
