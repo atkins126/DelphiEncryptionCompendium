@@ -24,7 +24,6 @@ interface
 {$INCLUDE TestDefines.inc}
 {$INCLUDE ..\..\Source\DECOptions.inc}
 
-{$IF CompilerVersion >= 24.0} // Too many local constants for Delphi XE2 and older
 uses
   System.SysUtils, System.Classes, Generics.Collections,
   {$IFDEF DUnitX}
@@ -40,12 +39,18 @@ type
   /// <summary>
   ///   Base class for the SHA3 tests, provides loading the test data from files
   /// </summary>
-  TestTHash_SHA3_Base = class(THash_TestBase)
+  TestTHash_SHA3_Base = class(THash_TestBaseExtended)
   strict private
     /// <summary>
     ///   Load the data of all test files specified for the test class
     /// </summary>
     procedure LoadTestFiles; inline;
+  strict protected
+    /// <summary>
+    ///   List of test data files to laod
+    /// </summary>
+    FTestFileNames : TStringList;
+
     /// <summary>
     ///   Calculate the Unicode hash value of the given test data
     /// </summary>
@@ -60,12 +65,12 @@ type
     /// </returns>
     function CalcUnicodeHash(TestData : string;
                              HashInst : TDECHashAuthentication): RawByteString; inline;
-  strict protected
-    /// <summary>
-    ///   List of test data files to laod
-    /// </summary>
-    FTestFileNames : TStringList;
 
+    /// <summary>
+    ///   Overridden so that loading of the test data file only happens here
+    ///   and not also for the metadata etc. tests as well
+    /// </summary>
+    procedure DoTest52(HashClass:TDECHash); override;
     /// <summary>
     ///   Overridden so that loading of the test data file only happens here
     ///   and not also for the metadata etc. tests as well
@@ -80,17 +85,22 @@ type
     ///   Overridden so that loading of the test data file only happens here
     ///   and not also for the metadata etc. tests as well
     /// </summary>
-    procedure DoTestCalcStream(HashClass:TDECHash); override;
+    procedure DoTestCalcStreamRawByteString(HashClass: TDECHashExtended); override;
     /// <summary>
     ///   Overridden so that loading of the test data file only happens here
     ///   and not also for the metadata etc. tests as well
     /// </summary>
-    procedure DoTestCalcStreamNoDone(HashClass: TDECHash); override;
+    procedure DoTestCalcStream(HashClass: TDECHashExtended); override;
     /// <summary>
     ///   Overridden so that loading of the test data file only happens here
     ///   and not also for the metadata etc. tests as well
     /// </summary>
-    procedure DoTestCalcStreamNoDoneMulti(HashClass: TDECHash); override;
+    procedure DoTestCalcStreamNoDone(HashClass: TDECHashExtended); override;
+    /// <summary>
+    ///   Overridden so that loading of the test data file only happens here
+    ///   and not also for the metadata etc. tests as well
+    /// </summary>
+    procedure DoTestCalcStreamNoDoneMulti(HashClass: TDECHashExtended); override;
     /// <summary>
     ///   Overridden so that loading of the test data file only happens here
     ///   and not also for the metadata etc. tests as well
@@ -120,6 +130,25 @@ type
     procedure LoadTestDataFile(FileName : string;
                                TestData : IHashTestDataContainer;
                                HashInst : TDECHashAuthentication);
+
+    /// <summary>
+    ///   Adds the SHA3 padding sheme to an input vector so that calculating
+    ///   the hash using Keccak instead of SHA3 provides the same result.
+    ///   Deliberately empty here as only implemented in class TestTHash_Keccak_Base.
+    /// </summary>
+    /// <param name="SHA3InputVector">
+    ///   The SHA3 input vector in bytes (not hex encoded!) which shall get
+    ///   the padding appended.
+    /// </param>
+    /// <param name="LastByteLength">
+    ///   Number of bits used in the last byte. In the keccak override this will
+    ///   be adjusted inside so it's a var param.
+    /// </param>
+    /// <returns>
+    ///   The input vector with added padding
+    /// </returns>
+    function AddLastByteForKeccakTest(SHA3InputVector    : RawByteString;
+                                      var LastByteLength : UInt8): RawByteString; virtual;
   public
     /// <summary>
     ///   Create test file list
@@ -257,9 +286,133 @@ type
     procedure TestLength0;
   end;
 
+  /// <summary>
+  ///   Base class for all Keccak test. This adds the necessary padding to the
+  ///   input data when loading that.
+  /// </summary>
+  TestTHash_Keccak_Base = class(TestTHash_SHA3_Base)
+  strict protected
+    /// <summary>
+    ///   Adds the SHA3 padding sheme to an input vector so that calculating
+    ///   the hash using Keccak instead of SHA3 provides the same result.
+    ///   Deliberately empty here as only implemented in class TestTHash_Keccak_Base.
+    /// </summary>
+    /// <param name="SHA3InputVector">
+    ///   The SHA3 input vector in bytes (not hex encoded!) which shall get
+    ///   the padding appended.
+    /// </param>
+    /// <param name="LastByteLength">
+    ///   Number of bits used in the last byte. In the keccak override this will
+    ///   be adjusted inside so it's a var param.
+    /// </param>
+    /// <returns>
+    ///   The input vector with added padding
+    /// </returns>
+    function AddLastByteForKeccakTest(SHA3InputVector    : RawByteString;
+                                      var LastByteLength : UInt8): RawByteString; override;
+
+    /// <summary>
+    ///   Adds the AddLastByteForKeccakTest necessary to be able to use a SHA3
+    ///   test vector given in the source code directly for Keccak.
+    /// </summary>
+    /// <param name="lDataRow">
+    ///   The already initialized test data row
+    /// </param>
+    /// <param name="SHA3InputVector">
+    ///   The SHA3 input vector in bytes (not hex encoded!) which shall get
+    ///   the padding appended.
+    /// </param>
+    /// <param name="LastByteLength">
+    ///   Number of bits used from the last byte 
+    /// </param>
+    procedure AddLastByteForCodeTest(var lDataRow    : IHashTestDataRowSetup;
+                                     SHA3InputVector : RawByteString;
+                                     LastByteLength  : UInt8);
+  end;
+
+  // Test methods for class THash_Keccak_224
+  {$IFDEF DUnitX} [TestFixture] {$ENDIF}
+  TestTHash_Keccak_224 = class(TestTHash_Keccak_Base)
+  strict protected
+    /// <summary>
+    ///   Some tests need to set the SHA3 specific padding byte and final bit length
+    ///   parameters
+    /// </summary>
+    procedure ConfigHashClass(HashClass: TDECHash; IdxTestData:Integer); override;
+    procedure TestFinalByteLengthOverflowHelper;
+  public
+    procedure SetUp; override;
+  published
+    procedure TestDigestSize;
+    procedure TestBlockSize;
+    procedure TestIsPasswordHash;
+    procedure TestClassByName;
+    procedure TestIdentity;
+    procedure TestFinalByteLength;
+    procedure TestFinalByteLengthOverflow;
+  end;
+
+  // Test methods for class THash_Keccak_256
+  {$IFDEF DUnitX} [TestFixture] {$ENDIF}
+  TestTHash_Keccak_256 = class(TestTHash_Keccak_Base)
+  strict protected
+    /// <summary>
+    ///   Some tests need to set the SHA3 specific padding byte and final bit length
+    ///   parameters
+    /// </summary>
+    procedure ConfigHashClass(HashClass: TDECHash; IdxTestData:Integer); override;
+  public
+    procedure SetUp; override;
+  published
+    procedure TestDigestSize;
+    procedure TestBlockSize;
+    procedure TestIsPasswordHash;
+    procedure TestClassByName;
+    procedure TestIdentity;
+  end;
+
+  // Test methods for class THash_Keccak_384
+  {$IFDEF DUnitX} [TestFixture] {$ENDIF}
+  TestTHash_Keccak_384 = class(TestTHash_Keccak_Base)
+  strict protected
+    /// <summary>
+    ///   Some tests need to set the SHA3 specific padding byte and final bit length
+    ///   parameters
+    /// </summary>
+    procedure ConfigHashClass(HashClass: TDECHash; IdxTestData:Integer); override;
+  public
+    procedure SetUp; override;
+  published
+    procedure TestDigestSize;
+    procedure TestBlockSize;
+    procedure TestIsPasswordHash;
+    procedure TestClassByName;
+    procedure TestIdentity;
+  end;
+
+  // Test methods for class THash_Keccak_512
+  {$IFDEF DUnitX} [TestFixture] {$ENDIF}
+  TestTHash_Keccak_512 = class(TestTHash_Keccak_Base)
+  strict protected
+    /// <summary>
+    ///   Some tests need to set the SHA3 specific padding byte and final bit length
+    ///   parameters
+    /// </summary>
+    procedure ConfigHashClass(HashClass: TDECHash; IdxTestData:Integer); override;
+  public
+    procedure SetUp; override;
+  published
+    procedure TestDigestSize;
+    procedure TestBlockSize;
+    procedure TestIsPasswordHash;
+    procedure TestClassByName;
+    procedure TestIdentity;
+  end;
+
 implementation
 
 uses
+  Winapi.Windows,
   DECFormat;
 
 { TestTHash_SHA3_Base }
@@ -286,6 +439,12 @@ begin
     LoadTestDataFile(FileName, FTestData, FHash);
 end;
 
+procedure TestTHash_SHA3_Base.DoTest52(HashClass: TDECHash);
+begin
+  LoadTestFiles;
+  inherited;
+end;
+
 procedure TestTHash_SHA3_Base.DoTestCalcBuffer(HashClass:TDECHash);
 begin
   LoadTestFiles;
@@ -298,19 +457,26 @@ begin
   inherited;
 end;
 
-procedure TestTHash_SHA3_Base.DoTestCalcStream(HashClass:TDECHash);
+procedure TestTHash_SHA3_Base.DoTestCalcStream(HashClass:TDECHashExtended);
 begin
   LoadTestFiles;
   inherited;
 end;
 
-procedure TestTHash_SHA3_Base.DoTestCalcStreamNoDone(HashClass: TDECHash);
+procedure TestTHash_SHA3_Base.DoTestCalcStreamNoDone(HashClass: TDECHashExtended);
 begin
   LoadTestFiles;
   inherited;
 end;
 
-procedure TestTHash_SHA3_Base.DoTestCalcStreamNoDoneMulti(HashClass: TDECHash);
+procedure TestTHash_SHA3_Base.DoTestCalcStreamNoDoneMulti(HashClass: TDECHashExtended);
+begin
+  LoadTestFiles;
+  inherited;
+end;
+
+procedure TestTHash_SHA3_Base.DoTestCalcStreamRawByteString(
+  HashClass: TDECHashExtended);
 begin
   LoadTestFiles;
   inherited;
@@ -336,20 +502,35 @@ var
   FileRow,
   FileRowTrim,
   s1, msg      : string;
+  MsgWithFixup : RawByteString; // if necessary msg with added padding for Keccak
   Len          : Int32;
-  FinalByteLen : Int16;
+  FinalByteLen : UInt8;
   HashLength   : Int16;
   lDataRow     : IHashTestDataRowSetup;
+
+//NewContents: TStringList;
+U : RawByteString;
 begin
   Len      := 0;
   Contents := TStringList.Create;
+//NewContents := TStringList.Create;
   try
     Contents.LoadFromFile(FileName);
 
     for FileRow in Contents do
     begin
+//if FileRow.StartsWith('MDuni') then
+//  Continue
+//else
+//  NewContents.Add(FileRow);
+
       FileRowTrim := LowerCase(Trim(FileRow));
 
+      // # denotes comments
+      if FileRow.StartsWith('#') then
+        Continue;
+
+      // length in bit
       if (Pos('len', FileRowTrim) = 1) then
       begin
         lDataRow := FTestData.AddRow;
@@ -364,6 +545,7 @@ begin
         Continue;
       end;
 
+      // the message to be hashed = test data input
       if (Pos('msg', FileRowTrim) = 1) then
       begin
         msg := FileRowTrim;
@@ -371,21 +553,42 @@ begin
 
         if (Len > 0) then
         begin
-          lDataRow.AddInputVector(TFormat_HexL.Decode(RawByteString(msg)));
+          MsgWithFixup := AddLastByteForKeccakTest(
+                                    TFormat_HexL.Decode(RawByteString(msg)),
+                                    FinalByteLen);
+          lDataRow.AddInputVector(MsgWithFixup);
+
+          lDataRow.FinalBitLength := FinalByteLen;
+          THash_SHA3Base(HashInst).FinalByteLength := FinalByteLen;
+
           // For Shake variants this will be overwritten once we know the output
           // hash length
-          lDataRow.ExpectedOutputUTFStrTest := CalcUnicodeHash(msg, HashInst);
+//U := CalcUnicodeHash(string(TFormat_HexL.Encode(MsgWithFixup)), HashInst);
+//NewContents.Add('MDuni = ' + string(U));
+//          lDataRow.ExpectedOutputUTFStrTest :=
+//            CalcUnicodeHash(string(TFormat_HexL.Encode(MsgWithFixup)), HashInst);
         end
         else
         begin
-          lDataRow.AddInputVector('');
-          lDataRow.ExpectedOutputUTFStrTest := CalcUnicodeHash('', HashInst);
+          FinalByteLen := 0;
+          MsgWithFixup := AddLastByteForKeccakTest('', FinalByteLen);
+          lDataRow.AddInputVector(MsgWithFixup);
+          lDataRow.FinalBitLength := FinalByteLen;
+          THash_SHA3Base(HashInst).FinalByteLength := FinalByteLen;
+//
+//          FinalByteLen := 0;
+//U := CalcUnicodeHash(string(TFormat_HexL.Encode(MsgWithFixup)), HashInst);
+////NewContents.Add('MDuni = ' + string(U));
+
+//          lDataRow.ExpectedOutputUTFStrTest := U;
+//            CalcUnicodeHash(string(TFormat_HexL.Encode(MsgWithFixup)), HashInst);
         end;
 
         Continue;
       end;
 
-      if (Pos('md', FileRowTrim) = 1) or (Pos('squeezed ', FileRowTrim) = 1) then
+      // the expected output
+      if (Pos('md =', FileRowTrim) = 1) or (Pos('squeezed ', FileRowTrim) = 1) then
       begin
         s1 := FileRowTrim;
         Delete(s1, 1, 5);
@@ -397,14 +600,17 @@ begin
           lDataRow.ExpectedOutput            := RawByteString(s1);
           HashLength                         := Length(RawByteString(s1)) div 2;
           lDataRow.HashResultByteLength      := HashLength;
-
-          // Shake can caculate unicode test data only after hash length is known
-          THash_ShakeBase(HashInst).HashSize := HashLength;
-
-          if (Len > 0) then
-            lDataRow.ExpectedOutputUTFStrTest  := CalcUnicodeHash(msg, HashInst)
-          else
-            lDataRow.ExpectedOutputUTFStrTest  := CalcUnicodeHash('', HashInst);
+//
+//          // Shake can caculate unicode test data only after hash length is known
+//          THash_ShakeBase(HashInst).HashSize := HashLength;
+////
+//          if (Len > 0) then
+////U := CalcUnicodeHash(msg, HashInst)
+//////            lDataRow.ExpectedOutputUTFStrTest  := CalcUnicodeHash(msg, HashInst)
+//          else
+////U := CalcUnicodeHash('', HashInst);
+//////            lDataRow.ExpectedOutputUTFStrTest  := CalcUnicodeHash('', HashInst);
+////NewContents.Add('MDuni = ' + string(U));
         end
         else
           // md from the SHA3 ones
@@ -412,10 +618,27 @@ begin
 
         Continue;
       end;
+
+      if (Pos('mduni', FileRowTrim) = 1) then
+      begin
+        s1 := FileRowTrim;
+        Delete(s1, 1, 8);
+
+        lDataRow.ExpectedOutputUTFStrTest := RawByteString(s1);
+      end;
     end;
   finally
     Contents.Free;
+//NewContents.SaveToFile(FileName + ' 2');
+//NewContents.Free;
   end;
+end;
+
+function TestTHash_SHA3_Base.AddLastByteForKeccakTest(SHA3InputVector    : RawByteString;
+                                                      var LastByteLength : UInt8): RawByteString;
+begin
+  // For non Keccak use do rather nothing
+  Result := SHA3InputVector;
 end;
 
 function TestTHash_SHA3_Base.CalcUnicodeHash(TestData : string;
@@ -1520,6 +1743,669 @@ begin
   CheckException(SetLength0Test, EDECHashException);
 end;
 
+{ TestTHash_Keccak_Base }
+
+procedure TestTHash_Keccak_Base.AddLastByteForCodeTest(var lDataRow    : IHashTestDataRowSetup;
+                                                       SHA3InputVector : RawByteString;
+                                                       LastByteLength  : UInt8);
+var
+  LastByteLen  : UInt8;
+  MsgWithFixup : RawByteString;
+begin
+  lDataRow.FinalBitLength := LastByteLength;
+  LastByteLen             := LastByteLength;
+  MsgWithFixup            := AddLastByteForKeccakTest(SHA3InputVector, LastByteLen);
+  lDataRow.AddInputVector(MsgWithFixup);
+  lDataRow.FinalBitLength := LastByteLen;
+
+  THash_SHA3Base(FHash).FinalByteLength := LastByteLen;
+
+  lDataRow.ExpectedOutputUTFStrTest :=
+            CalcUnicodeHash(string(TFormat_HexL.Encode(MsgWithFixup)), FHash);
+end;
+
+function TestTHash_Keccak_Base.AddLastByteForKeccakTest(SHA3InputVector    : RawByteString;
+                                                        var LastByteLength : UInt8): RawByteString;
+var
+  lastbyte : UInt8;
+begin
+  case LastByteLength of
+  0 : begin // ist ok
+        SHA3InputVector := SHA3InputVector + chr($02);
+        LastByteLength := 2;
+      end;
+  1..6 :
+      begin
+        lastbyte := UInt8(SHA3InputVector[High(SHA3InputVector)]);
+        // in lastbyte 0 an stelle fblSHA3 einfügen:
+        lastbyte := lastbyte and (( 1 shl LastByteLength ) xor $FF);
+        // in lastbyte 1 an stelle fblSHA3+1 einfügen:
+        lastbyte := lastbyte or BYTE( 1 shl (LastByteLength + 1));
+        SHA3InputVector[High(SHA3InputVector)] := Ansichar(lastbyte);
+        if LastByteLength < 6 then
+          inc(LastByteLength,2)
+        else
+          LastByteLength := 0;
+      end;
+  7 : begin // ist ok
+        // 0 anhängen - es könnte sein, dass in mSHA3 eine 1 steht
+        // wenn man sicher ist, dass dies nie der Fall ist, dann kann
+        // man auf die vier Zeilen verzichten
+        lastbyte := UInt8(SHA3InputVector[High(SHA3InputVector)]);
+        lastbyte := lastbyte and $7F; // evt vorhandene 1 an vorderster Stelle löschen
+        SHA3InputVector[High(SHA3InputVector)] := Ansichar(lastbyte);
+
+        SHA3InputVector := SHA3InputVector + chr($01);
+        LastByteLength := 1;
+      end;
+  end;
+
+  Result := SHA3InputVector;
+end;
+
+{ TestTHash_Keccak_224 }
+
+procedure TestTHash_Keccak_224.ConfigHashClass(HashClass: TDECHash;
+  IdxTestData: Integer);
+begin
+  inherited;
+
+  THash_Keccak_224(FHash).FinalByteLength := FTestData[IdxTestData].FinalByteBitLength;
+end;
+
+procedure TestTHash_Keccak_224.SetUp;
+var
+  lDataRow : IHashTestDataRowSetup;
+//  i        : Integer;
+//  s        : RawByteString;
+begin
+  // All specified data sources are for the non unicode expected outputs
+  inherited;
+  FHash := THash_Keccak_224.Create;
+
+  //Source https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Algorithm-
+  //       Validation-Program/documents/sha3/sha-3bittestvectors.zip
+  FTestFileNames.Add('..\..\Unit Tests\Data\SHA3_224ShortMsg.rsp');
+  FTestFileNames.Add('..\..\Unit Tests\Data\SHA3_224LongMsg.rsp');
+  // SourceEnd
+
+  // Source https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-
+  //        and-Guidelines/documents/examples/SHA3-224_Msg5.pdf
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'ffbad5da96bad71789330206dc6768ecaeb1b32d' +
+                                       'ca6b3301489674ab';
+  AddLastByteForCodeTest(lDataRow, #$13, 5);
+
+  // Source https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-
+  //        and-Guidelines/documents/examples/SHA3-224_Msg30.pdf
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'd666a514cc9dba25ac1ba69ed3930460deaac985' +
+                                       '1b5f0baab007df3b';
+  AddLastByteForCodeTest(lDataRow, #$53#$58#$7B#$19, 6);
+
+// Commented out because AddLastByteForCodeTest cannot handle the 1, 20 syntax
+//  // Source: https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-
+//  //         and-Guidelines/documents/examples/SHA3-224_1600.pdf
+//  lDataRow := FTestData.AddRow;
+//  lDataRow.ExpectedOutput           := '9376816aba503f72f96ce7eb65ac095deee3be4b' +
+//                                       'f9bbc2a1cb7e11e0';
+//  lDataRow.ExpectedOutputUTFStrTest := '28a4a80fded04a676674687c8330422eedeb18c9' +
+//                                       'dba976234a9e007a';
+//  lDataRow.AddInputVector(RawByteString(#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3), 1, 20);
+//  lDataRow.FinalBitLength := 0;
+//
+//  // Source: https://emn178.github.io/online-tools/sha3_224.html
+//  lDataRow := FTestData.AddRow;
+//  lDataRow.ExpectedOutput           := '32eb6a4121daebe223db1987740814e1dd9d9ddb' +
+//                                       'ddfd466feff5c9b4';
+//  lDataRow.ExpectedOutputUTFStrTest := '0f1ad8cd5a85fe68319b67427e1f0b685498bc24' +
+//                                       '6a81a1f595c89e4e';
+//  lDataRow.AddInputVector(RawByteString('e21et2e2et1208e7t12e07812te08127et1028e' +
+//                                        '7t1208e7gd81d872t178r02tr370823'), 1, 10);
+//  lDataRow.FinalBitLength := 0;
+
+//  lDataRow := FTestData.AddRow;
+//  lDataRow.ExpectedOutput           := 'f7fc914c8fe4827d866b02df2459840260f4adb0' +
+//                                       'db4deb9fa661756c';
+//  lDataRow.ExpectedOutputUTFStrTest := 'e4d44bbda0b8fc8a73b421f6795c6380c0e21d50' +
+//                                       '539a7b43c20a7529';
+//
+//   for i := 1 to 10 do
+//     s := s + 'e21et2e2et1208e7t12e07812te08127et1028e7t1208e7gd81d872t178r02tr370823';
+//   s := s + 'TurboMagic';
+//   s := s + s + s;
+//
+//  lDataRow.AddInputVector(s);
+//  lDataRow.FinalBitLength := 0;
+
+
+  // Source https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-
+  //        and-Guidelines/documents/examples/SHA3-224_Msg1605.pdf
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '22d2f7bb0b173fd8c19686f9173166e3ee627380' +
+                                       '47d7eadd69efb228';
+
+  AddLastByteForCodeTest(lDataRow, RawByteString(
+                                     #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                     #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                     #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                     #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                     #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                     #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                     #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                     #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                     #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                     #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                     #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                     #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                     #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                     #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                     #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                     #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                     #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                     #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                     #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                     #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                     #$A3), 5);
+
+  // Source https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-
+  //        and-Guidelines/documents/examples/SHA3-224_1630.pdf
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '4e907bb1057861f200a599e9d4f85b02d88453bf' +
+                                       '5b8ace9ac589134c';
+  AddLastByteForCodeTest(lDataRow, RawByteString(
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3), 6);
+end;
+
+procedure TestTHash_Keccak_224.TestBlockSize;
+begin
+  CheckEquals(144, FHash.BlockSize);
+end;
+
+procedure TestTHash_Keccak_224.TestClassByName;
+begin
+  DoTestClassByName('THash_Keccak_224', THash_Keccak_224);
+end;
+
+procedure TestTHash_Keccak_224.TestDigestSize;
+begin
+  CheckEquals(28, FHash.DigestSize);
+end;
+
+procedure TestTHash_Keccak_224.TestIdentity;
+begin
+  CheckEquals($5F9A1BC1, FHash.Identity);
+end;
+
+procedure TestTHash_Keccak_224.TestFinalByteLength;
+var
+  Hash_Keccack_224 : THash_Keccak_224;
+  i                : Integer;
+begin
+  Hash_Keccack_224 := THash_Keccak_224.Create;
+  try
+    for i := 0 to 7 do
+    begin
+      Hash_Keccack_224.FinalByteLength := i;
+      CheckEquals(i, Hash_Keccack_224.FinalByteLength);
+    end;
+  finally
+    Hash_Keccack_224.Free;
+  end;
+end;
+
+procedure TestTHash_Keccak_224.TestFinalByteLengthOverflow;
+begin
+  CheckException(TestFinalByteLengthOverflowHelper, EDECHashException);
+end;
+
+procedure TestTHash_Keccak_224.TestFinalByteLengthOverflowHelper;
+var
+  Hash_Keccack_224 : THash_Keccak_224;
+begin
+  Hash_Keccack_224 := THash_Keccak_224.Create;
+  try
+    Hash_Keccack_224.FinalByteLength := 8;
+    CheckEquals(8, Hash_Keccack_224.FinalByteLength);
+  finally
+    Hash_Keccack_224.Free;
+  end;
+end;
+
+procedure TestTHash_Keccak_224.TestIsPasswordHash;
+begin
+  CheckNotEquals(true, FHash.IsPasswordHash);
+end;
+
+{ TestTHash_Keccak_256 }
+
+procedure TestTHash_Keccak_256.ConfigHashClass(HashClass: TDECHash;
+  IdxTestData: Integer);
+begin
+  inherited;
+
+  THash_Keccak_256(FHash).FinalByteLength := FTestData[IdxTestData].FinalByteBitLength;
+end;
+
+procedure TestTHash_Keccak_256.SetUp;
+var
+  lDataRow:IHashTestDataRowSetup;
+begin
+  // All specified data sources are for the non unicode expected outputs
+  inherited;
+  FHash := THash_Keccak_256.Create;
+
+  //Source https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Algorithm-
+  //       Validation-Program/documents/sha3/sha-3bittestvectors.zip
+  FTestFileNames.Add('..\..\Unit Tests\Data\SHA3_256ShortMsg.rsp');
+  FTestFileNames.Add('..\..\Unit Tests\Data\SHA3_256LongMsg.rsp');
+  // SourceEnd
+
+//  // Source: https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-
+//  //         and-Guidelines/documents/examples/SHA3-224_1600.pdf
+//  lDataRow := FTestData.AddRow;
+//  lDataRow.ExpectedOutput           := '79f38adec5c20307a98ef76e8324afbfd46cfd81' +
+//                                       'b22e3973c65fa1bd9de31787';
+//  lDataRow.ExpectedOutputUTFStrTest := '06ea5e186dab1b3f99bcf91918b53748367674c0' +
+//                                       '5baa627010fba06edb67f0ba';
+//  lDataRow.AddInputVector(RawByteString(
+//                          #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3), 1, 20);
+//  lDataRow.FinalBitLength := 0;
+
+  // Source https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-
+  //        and-Guidelines/documents/examples/SHA3-256_Msg5.pdf
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '7b0047cf5a456882363cbf0fb05322cf65f4b705' +
+                                       '9a46365e830132e3b5d957af';
+  AddLastByteForCodeTest(lDataRow, #$13, 5);
+
+  // Source https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-
+  //        and-Guidelines/documents/examples/SHA3-256_Msg30.pdf
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'c8242fef409e5ae9d1f1c857ae4dc624b92b1980' +
+                                       '9f62aa8c07411c54a078b1d0';
+  AddLastByteForCodeTest(lDataRow, #$53#$58#$7B#$19, 6);
+
+  // Source https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-
+  //        and-Guidelines/documents/examples/SHA3-256_Msg1605.pdf
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '81ee769bed0950862b1ddded2e84aaa6ab7bfdd3' +
+                                       'ceaa471be31163d40336363c';
+  AddLastByteForCodeTest(lDataRow, RawByteString(
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3), 5);
+
+  // Source https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-
+  //        and-Guidelines/documents/examples/SHA3-256_1630.pdf
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '52860aa301214c610d922a6b6cab981ccd06012e' +
+                                       '54ef689d744021e738b9ed20';
+  AddLastByteForCodeTest(lDataRow, RawByteString(
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3), 6);
+end;
+
+procedure TestTHash_Keccak_256.TestBlockSize;
+begin
+  CheckEquals(136, FHash.BlockSize);
+end;
+
+procedure TestTHash_Keccak_256.TestClassByName;
+begin
+  DoTestClassByName('THash_Keccak_256', THash_Keccak_256);
+end;
+
+procedure TestTHash_Keccak_256.TestDigestSize;
+begin
+  CheckEquals(32, FHash.DigestSize);
+end;
+
+procedure TestTHash_Keccak_256.TestIdentity;
+begin
+  CheckEquals($FED5EC2A, FHash.Identity);
+end;
+
+procedure TestTHash_Keccak_256.TestIsPasswordHash;
+begin
+  CheckNotEquals(true, FHash.IsPasswordHash);
+end;
+
+{ TestTHash_Keccak_384 }
+
+procedure TestTHash_Keccak_384.ConfigHashClass(HashClass: TDECHash;
+  IdxTestData: Integer);
+begin
+  inherited;
+
+  THash_Keccak_384(FHash).FinalByteLength := FTestData[IdxTestData].FinalByteBitLength;
+end;
+
+procedure TestTHash_Keccak_384.SetUp;
+var
+  lDataRow:IHashTestDataRowSetup;
+begin
+  inherited;
+  FHash := THash_Keccak_384.Create;
+
+  //Source https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Algorithm-
+  //       Validation-Program/documents/sha3/sha-3bittestvectors.zip
+  FTestFileNames.Add('..\..\Unit Tests\Data\SHA3_384ShortMsg.rsp');
+  FTestFileNames.Add('..\..\Unit Tests\Data\SHA3_384LongMsg.rsp');
+  // SourceEnd
+
+//  // Source: https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-
+//  //         and-Guidelines/documents/examples/SHA3-384_1600.pdf
+//  lDataRow := FTestData.AddRow;
+//  lDataRow.ExpectedOutput           := '1881de2ca7e41ef95dc4732b8f5f002b189cc1e4' +
+//                                       '2b74168ed1732649ce1dbcdd76197a31fd55ee98' +
+//                                       '9f2d7050dd473e8f';
+//  lDataRow.ExpectedOutputUTFStrTest := '50dd07a64dc6ff190db60e612d8511742baa8eb5' +
+//                                       'a499a0a02e51cea3f4b922f8ecf72785dc0a2ef3' +
+//                                       '8230340378d3d104';
+//  lDataRow.AddInputVector(RawByteString(
+//                          #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3), 1, 20);
+//  lDataRow.FinalBitLength := 0;
+
+  // Source https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-
+  //        and-Guidelines/documents/examples/SHA3-384_Msg5.pdf
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '737c9b491885e9bf7428e792741a7bf8dca96534' +
+                                       '71c3e148473f2c236b6a0a6455eb1dce9f779b4b' +
+                                       '6b237fef171b1c64';
+  AddLastByteForCodeTest(lDataRow, #$13, 5);
+
+  // Source https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-
+  //        and-Guidelines/documents/examples/SHA3-384_Msg30.pdf
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '955b4dd1be03261bd76f807a7efd432435c41736' +
+                                       '2811b8a50c564e7ee9585e1ac7626dde2fdc030f' +
+                                       '876196ea267f08c3';
+  AddLastByteForCodeTest(lDataRow, #$53#$58#$7B#$19, 6);
+
+  // Source https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-
+  //        and-Guidelines/documents/examples/SHA3-384_Msg1605.pdf
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'a31fdbd8d576551c21fb1191b54bda65b6c5fe97' +
+                                       'f0f4a69103424b43f7fdb835979fdbeae8b3fe16' +
+                                       'cb82e587381eb624';
+  AddLastByteForCodeTest(lDataRow, RawByteString(
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3), 5);
+
+  // Source https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-
+  //        and-Guidelines/documents/examples/SHA3-384_1630.pdf
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '3485d3b280bd384cf4a777844e94678173055d1c' +
+                                       'bc40c7c2c3833d9ef12345172d6fcd31923bb879' +
+                                       '5ac81847d3d8855c';
+  AddLastByteForCodeTest(lDataRow, RawByteString(
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3), 6);
+end;
+
+procedure TestTHash_Keccak_384.TestBlockSize;
+begin
+  CheckEquals(104, FHash.BlockSize);
+end;
+
+procedure TestTHash_Keccak_384.TestClassByName;
+begin
+  DoTestClassByName('THash_Keccak_384', THash_Keccak_384);
+end;
+
+procedure TestTHash_Keccak_384.TestDigestSize;
+begin
+  CheckEquals(48, FHash.DigestSize);
+end;
+
+procedure TestTHash_Keccak_384.TestIdentity;
+begin
+  CheckEquals($A4B7997C, FHash.Identity);
+end;
+
+procedure TestTHash_Keccak_384.TestIsPasswordHash;
+begin
+  CheckNotEquals(true, FHash.IsPasswordHash);
+end;
+
+{ TestTHash_Keccak_512 }
+
+procedure TestTHash_Keccak_512.ConfigHashClass(HashClass: TDECHash;
+  IdxTestData: Integer);
+begin
+  inherited;
+
+  THash_Keccak_512(FHash).FinalByteLength := FTestData[IdxTestData].FinalByteBitLength;
+end;
+
+procedure TestTHash_Keccak_512.SetUp;
+var
+  lDataRow : IHashTestDataRowSetup;
+begin
+  inherited;
+  FHash := THash_Keccak_512.Create;
+
+  //Source https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Algorithm-
+  //       Validation-Program/documents/sha3/sha-3bittestvectors.zip
+  FTestFileNames.Add('..\..\Unit Tests\Data\SHA3_512ShortMsg.rsp');
+  FTestFileNames.Add('..\..\Unit Tests\Data\SHA3_512LongMsg.rsp');
+  // SourceEnd
+
+//  // Source: https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-
+//  //         and-Guidelines/documents/examples/SHA3-512_1600.pdf
+//  lDataRow := FTestData.AddRow;
+//  lDataRow.ExpectedOutput           := 'e76dfad22084a8b1467fcf2ffa58361bec7628ed' +
+//                                       'f5f3fdc0e4805dc48caeeca81b7c13c30adf52a3' +
+//                                       '659584739a2df46be589c51ca1a4a8416df6545a' +
+//                                       '1ce8ba00';
+//  lDataRow.ExpectedOutputUTFStrTest := '54ab223a7cee7603f2b89596b54f8d838845e0a0' +
+//                                       'af2be3e9ad2cd7acb111757cb0c41b3564c07778' +
+//                                       '47684435da78577781eef8e6a6652c9844a85882' +
+//                                       'e0fa8b28';
+//  lDataRow.AddInputVector(RawByteString(
+//                          #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3), 1, 20);
+//  lDataRow.FinalBitLength := 0;
+
+  // Source https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-
+  //        and-Guidelines/documents/examples/SHA3-512_Msg5.pdf
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'a13e01494114c09800622a70288c432121ce7003' +
+                                       '9d753cadd2e006e4d961cb27544c1481e5814bdc' +
+                                       'eb53be6733d5e099795e5e81918addb058e22a9f' +
+                                       '24883f37';
+  AddLastByteForCodeTest(lDataRow, #$13, 5);
+
+  // Source https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-
+  //        and-Guidelines/documents/examples/SHA3-512_Msg30.pdf
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := '9834c05a11e1c5d3da9c740e1c106d9e590a0e53' +
+                                       '0b6f6aaa7830525d075ca5db1bd8a6aa981a2861' +
+                                       '3ac334934a01823cd45f45e49b6d7e6917f2f167' +
+                                       '78067bab';
+  AddLastByteForCodeTest(lDataRow, #$53#$58#$7B#$19, 6);
+
+  // Source https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-
+  //        and-Guidelines/documents/examples/SHA3-512_Msg1605.pdf
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'fc4a167ccb31a937d698fde82b04348c9539b28f' +
+                                       '0c9d3b4505709c03812350e4990e9622974f6e57' +
+                                       '5c47861c0d2e638ccfc2023c365bb60a93f52855' +
+                                       '0698786b';
+  AddLastByteForCodeTest(lDataRow, RawByteString(
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3), 5);
+
+  // Source https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-
+  //        and-Guidelines/documents/examples/SHA3-512_1630.pdf
+  lDataRow := FTestData.AddRow;
+  lDataRow.ExpectedOutput           := 'cf9a30ac1f1f6ac0916f9fef1919c595debe2ee8' +
+                                       '0c85421210fdf05f1c6af73aa9cac881d0f91db6' +
+                                       'd034a2bbadc1cf7fbcb2ecfa9d191d3a5016fb3f' +
+                                       'ad8709c9';
+  AddLastByteForCodeTest(lDataRow, RawByteString(
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3#$A3 +
+                                      #$A3#$A3#$A3#$A3), 6);
+end;
+
+procedure TestTHash_Keccak_512.TestBlockSize;
+begin
+  CheckEquals(72, FHash.BlockSize);
+end;
+
+procedure TestTHash_Keccak_512.TestClassByName;
+begin
+  DoTestClassByName('THash_Keccak_512', THash_Keccak_512);
+end;
+
+procedure TestTHash_Keccak_512.TestDigestSize;
+begin
+  CheckEquals(64, FHash.DigestSize);
+end;
+
+procedure TestTHash_Keccak_512.TestIdentity;
+begin
+  CheckEquals($989BFBB2, FHash.Identity);
+end;
+
+procedure TestTHash_Keccak_512.TestIsPasswordHash;
+begin
+  CheckNotEquals(true, FHash.IsPasswordHash);
+end;
+
 initialization
   // Register any test cases with the test runner
   {$IFDEF DUnitX}
@@ -1529,17 +2415,21 @@ initialization
   TDUnitX.RegisterTestFixture(TestTHash_SHA3_512);
   TDUnitX.RegisterTestFixture(TestTHash_Shake128);
   TDUnitX.RegisterTestFixture(TestTHash_Shake256);
+  TDUnitX.RegisterTestFixture(TestTHash_Keccak_224);
+  TDUnitX.RegisterTestFixture(TestTHash_Keccak_256);
+  TDUnitX.RegisterTestFixture(TestTHash_Keccak_384);
+  TDUnitX.RegisterTestFixture(TestTHash_Keccak_512);
   {$ELSE}
   RegisterTests('DECHash', [TestTHash_SHA3_224.Suite,
                             TestTHash_SHA3_256.Suite,
                             TestTHash_SHA3_384.Suite,
                             TestTHash_SHA3_512.Suite,
                             TestTHash_Shake128.Suite,
-                            TestTHash_Shake256.Suite]);
+                            TestTHash_Shake256.Suite,
+                            TestTHash_Keccak_224.Suite,
+                            TestTHash_Keccak_256.Suite,
+                            TestTHash_Keccak_384.Suite,
+                            TestTHash_Keccak_512.Suite]);
   {$ENDIF}
-
-{$ELSE}
-implementation
-{$IFEND}
 
 end.

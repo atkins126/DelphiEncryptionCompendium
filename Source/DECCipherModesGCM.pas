@@ -39,6 +39,15 @@ type
   P128 = ^T128;
 
   /// <summary>
+  ///   Array of 16 bytes
+  /// </summary>
+  T16ByteArray = array[0..15] of Byte;
+  /// <summary>
+  ///   Pointer to an array of 16 bytes
+  /// </summary>
+  P16ByteArray = ^T16ByteArray;
+
+  /// <summary>
   ///   A methopd of this type needs to be supplied for encrypting or decrypting
   ///   a block via this GCM algorithm. The method is implemented as a parameter,
   ///   to avoid the need to bring TGCM in the inheritance chain. TGCM thus can
@@ -232,10 +241,14 @@ type
     /// <param name="Ciphertext">
     ///   Encrypted data used in the calculation
     /// </param>
+    /// <param name="CiphertextSize">
+    ///   Length of the ciphertext in bytes. Use when reading part of array.
+    /// </param>
     /// <returns>
     ///   Calculated raw hash value which will later get returned as AuthenticatedTag
     /// </returns>
-    function CalcGaloisHash(AuthenticatedData, Ciphertext: TBytes): T128;
+    function CalcGaloisHash(AuthenticatedData, Ciphertext : TBytes; CiphertextSize:
+        Integer): T128;
 
     /// <summary>
     ///   Encrypts a T128 value using the encryption method specified on init
@@ -349,9 +362,9 @@ end;
 procedure TGCM.XOR_ArrayWithT128(const x: TBytes; XIndex, Count: UInt64; y: T128; var Result: TBytes);
 var
   i  : integer;
-  { TODO : change to a pointer to y[0], to get rid of the absolute? }
-  by : array[0..15] of byte absolute y[0];
+  by : P16ByteArray;
 begin
+  by := @y[0];
   for i := 0 to Count-1 do
   begin
     Result[XIndex] := x[XIndex] xor by[i];
@@ -362,9 +375,9 @@ end;
 function TGCM.poly_mult_H(const hx : T128): T128;
 var
   i : integer;
-  { TODO : change to a pointer to hx[0], to get rid of the absolute? }
-  x : array[0..15] of byte absolute hx[0];
+  x : P16ByteArray;
 begin
+  x := @hx[0];
   Result := FM[0, x[0]];
 
   for i := 1 to 15 do
@@ -378,9 +391,9 @@ procedure TGCM.SetAuthenticationCipherLength(var x : T128;
                                              AuthDataLength, CipherTextLength : UInt64);
 var
   i  : integer;
-  { TODO : change to a pointer to x[0], to get rid of the absolute? }
-  hx : array[0..15] of byte absolute x[0];
+  hx : P16ByteArray;
 begin
+  hx := @x[0];
   // al:
   x := nullbytes;
   i := 7;
@@ -405,11 +418,11 @@ procedure TGCM.GenerateTableM8Bit(const H : T128);
 var
   hbit, hbyte, i, j : integer;
   HP : T128;
-  { TODO : change to a pointer to HP[0], to get rid of the absolute? }
-  bHP : array[0..15] of byte absolute HP[0];
+  bHP : P16ByteArray;
   mask : byte;
 begin
   HP := H;
+  bHP := @HP[0];
   for hbyte := 0 to 15 do
   begin
     mask := 128;
@@ -446,10 +459,11 @@ end;
 
 procedure TGCM.ShiftRight(var rx : T128);
 var
-  { TODO : change to a pointer to rx[0], to get rid of the absolute? }
-  x : array[0..15] of byte absolute rx[0];
+  x : P16ByteArray;
   i : integer;
 begin
+  x := @rx[0];
+
   for i := 15 downto 1 do
     x[i] := (x[i] shr 1) or ((x[i-1] and 1) shl 7);
 
@@ -464,9 +478,10 @@ end;
 
 procedure TGCM.INCR(var Y : T128);
 var
-  { TODO : change to a pointer to Y[0], to get rid of the absolute? }
-  bY : array[0..15] of byte absolute Y[0];
+  bY : P16ByteArray;
 begin
+  bY := @Y[0];
+
   {$IFOPT Q+}{$DEFINE RESTORE_OVERFLOWCHECKS}{$Q-}{$ENDIF}
   {$Q-}
   inc(bY[15]);
@@ -518,38 +533,34 @@ begin
      b^ := 1;
   end
   else
-     FY := CalcGaloisHash(nil, InitVector);
+     FY := CalcGaloisHash(nil, InitVector, length(InitVector));
 
   FEncryptionMethod(@FY[0], @FE_K_Y0[0], 16);
 end;
 
-function TGCM.CalcGaloisHash(AuthenticatedData, Ciphertext : TBytes): T128;
+function TGCM.CalcGaloisHash(AuthenticatedData, Ciphertext : TBytes;
+  CiphertextSize: Integer): T128;
 var
   AuthCipherLength : T128;
   x : T128;
   n : Uint64;
 
-  procedure encode(data : TBytes);
+  procedure encode(data : TBytes; dataSize: Integer);
   var
     i, mod_d, div_d, len_d : UInt64;
     hdata : T128;
   begin
-    len_d := length(data);
+    len_d := dataSize;
     if (len_d > 0) then
     begin
       n := 0;
       div_d := len_d div 16;
       if div_d > 0 then
       begin
-        { TODO : When 6.5 is started the while should be replaced by the for loop again }
-//      for i := 0 to div_d-1 do
-        i := 0;
-        while (i <= div_d-1) do
+        for i := 0 to div_d-1 do
         begin
           x := poly_mult_H(XOR_PointerWithT128(@data[n], x ));
           inc(n, 16);
-          { TODO : Remove the inc when 6.5 implementation starts }
-          inc(i);
         end;
       end;
 
@@ -565,9 +576,10 @@ var
 
 begin
   x := nullbytes;
-  encode(AuthenticatedData);
-  encode(Ciphertext);
-  SetAuthenticationCipherLength(AuthCipherLength, length(AuthenticatedData) shl 3, length(ciphertext) shl 3);
+  encode(AuthenticatedData, length(AuthenticatedData));
+  Assert(length(Ciphertext) >= CiphertextSize);
+  encode(Ciphertext, CiphertextSize);
+  SetAuthenticationCipherLength(AuthCipherLength, length(AuthenticatedData) shl 3, CiphertextSize shl 3);
 
   Result := poly_mult_H(XOR_T128(AuthCipherLength, x));
 end;
@@ -580,16 +592,11 @@ begin
   i := 0;
   BlockCount := Size div 16;
 
-  { TODO : When 6.5 is started the while should be replaced by the for loop again }
-//  for j := 1 to BlockCount do
-  j := 1;
-  while (j <= BlockCount) do
+  for j := 1 to BlockCount do
   begin
     INCR(FY);
     P128(@Dest[i])^ := XOR_PointerWithT128(@Source[i], EncodeT128(FY));
     inc(i, 16);
-    { TODO : Remove the inc when 6.5 implementation starts }
-    inc(j);
   end;
 
   if i < Size then
@@ -598,7 +605,7 @@ begin
     XOR_ArrayWithT128(Source, i, UInt64(Size)-i, EncodeT128(FY), Dest);
   end;
 
-  a_tag := XOR_T128(CalcGaloisHash(DataToAuthenticate, Source), FE_K_Y0);
+  a_tag := XOR_T128(CalcGaloisHash(DataToAuthenticate, Source, Size), FE_K_Y0);
 
   Setlength(FCalcAuthenticationTag, FCalcAuthenticationTagLength);
   Move(a_tag[0], FCalcAuthenticationTag[0], FCalcAuthenticationTagLength);
@@ -622,18 +629,13 @@ begin
   i := 0;
   div_len_plain := Size div 16;
 
-  { TODO : When 6.5 is started the while should be replaced by the for loop again }
-//  for j := 1 to div_len_plain do
-  j := 1;
-  while (j <= div_len_plain) do
+  for j := 1 to div_len_plain do
   begin
     INCR(FY);
 
     P128(@Dest[i])^ := XOR_PointerWithT128(@Source[i], EncodeT128(FY));
 
     inc(i,16);
-    { TODO : Remove the inc when 6.5 implementation starts }
-    inc(j);
   end;
 
   if i < Size then
@@ -642,7 +644,7 @@ begin
     XOR_ArrayWithT128(Source, i, UInt64(Size)-i, EncodeT128(FY), Dest);
   end;
 
-  AuthTag := XOR_T128(CalcGaloisHash(DataToAuthenticate, Dest), FE_K_Y0);
+  AuthTag := XOR_T128(CalcGaloisHash(DataToAuthenticate, Dest, Size), FE_K_Y0);
   Setlength(FCalcAuthenticationTag, FCalcAuthenticationTagLength);
   Move(AuthTag[0], FCalcAuthenticationTag[0], FCalcAuthenticationTagLength);
 end;
@@ -658,16 +660,9 @@ begin
 end;
 
 function TGCM.GetStandardAuthenticationTagBitLengths: TStandardBitLengths;
-const
-  BitLengths : array[0..4] of Uint16 = (96, 104, 112, 120, 128);
-var
-  i : integer;
 begin
   SetLength(Result, 5);
-  { TODO: When 6.5 is started the array can be assigned directly again }
-  //  Result := [96, 104, 112, 120, 128];
-  for i := 0 to high(BitLengths) do
-    result[i] := BitLengths[i];
+  Result := [96, 104, 112, 120, 128];
 end;
 
 //

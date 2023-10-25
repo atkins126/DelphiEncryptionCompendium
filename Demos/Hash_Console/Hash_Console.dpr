@@ -32,8 +32,6 @@ uses
 var
   Hash : THash_RipeMD160;
   s    : RawByteString;
-
-  W: THash_Whirlpool1;
 begin
   Hash := THash_RipeMD160.Create;
   try
@@ -45,15 +43,8 @@ begin
       WriteLn('RipeMD160 digest (hash value) of ' + s + ' is ' + sLineBreak +
               Hash.CalcString(s, TFormat_HEX));
 
-      ReadLn;
-
-      W := THash_Whirlpool1.Create;
-
-      s := 'The quick brown fox jumps over the lazy dog';
-
-      WriteLn('RipeMD160 digest (hash value) of ' + s + ' is ' + sLineBreak +
-              W.CalcString(s, TFormat_HEX));
-      W.Free;
+      // Securely erase the memory
+      Hash.Done;
     except
       on E: Exception do
         Writeln(E.ClassName, ': ', E.Message);
