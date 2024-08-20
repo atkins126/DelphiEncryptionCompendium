@@ -15,10 +15,10 @@
   under the License.
 *****************************************************************************}
 unit DECCipherBase;
+{$INCLUDE DECOptions.inc}
 
 interface
 
-{$INCLUDE DECOptions.inc}
 
 uses
   {$IFDEF FPC}
@@ -26,7 +26,7 @@ uses
   {$ELSE}
   System.SysUtils, System.Classes, Generics.Collections,
   {$ENDIF}
-  DECBaseClass, DECFormatBase;
+  DECBaseClass, DECFormatBase, DECTypes;
 
 type
   /// <summary>
@@ -112,9 +112,6 @@ type
   ///   csNew : cipher isn't initialized, .Init() must be called before en/decode
   /// </para>
   /// <para>
-  ///   csNew : cipher isn't initialized, .Init() must be called before en/decode
-  /// </para>
-  /// <para>
   ///   csInitialized : cipher is initialized by .Init(), i.e. Keysetup was processed
   /// </para>
   /// <para>
@@ -128,10 +125,11 @@ type
   ///                   be processed, the cipher is blocked
   /// </para>
   /// <para>
-  ///   csDone : Processing is finished and Cipher.Done was called. Now new En/Decoding
+  ///   csDone : Processing is finished and Cipher.Done was called. Now, new En/Decoding
   ///            can be started without calling .Init() before. csDone is basically
   ///            identical to csInitialized, except Cipher.Buffer holds the encrypted
-  ///            last state of Cipher.Feedback, thus Cipher.Buffer can be used as C-MAC.
+  ///            last state of Cipher.Feedback which can be used as
+  ///            Cipher-based message authentication code (CMAC).
   /// </para>
   /// </summary>
   TCipherState = (csNew, csInitialized, csEncode, csDecode, csPadded, csDone);
@@ -221,7 +219,7 @@ type
     ///   This is the complete memory block containing FInitializationVector,
     ///   FFeedback, FBuffer and FAdditionalBuffer
     /// </summary>
-    FData     : PByteArray;
+    FData     : PUInt8Array;
     /// <summary>
     ///   This is the size of FData in byte
     /// </summary>
@@ -252,8 +250,10 @@ type
     ///   Some algorithms, mostly the cipher mode ones, need a temporary buffer
     ///   to work with. Some other methods like Done or Valid cipher need to pass
     ///   a buffer as parameter as that is ecpected by the called method.
+    ///   If Done was called, FBuffer contains a C-MAC which is the encryption
+    ///   of the last block concatention feedback.
     /// </summary>
-    FBuffer: PByteArray;
+    FBuffer: PUInt8Array;
 
     /// <summary>
     ///   Initialization vector. When using cipher modes to derive a stream
@@ -262,7 +262,7 @@ type
     ///   is no such encrypted data yet, so this initialization vector fills this
     ///   "gap".
     /// </summary>
-    FInitializationVector: PByteArray;
+    FInitializationVector: PUInt8Array;
 
     /// <summary>
     ///   Size of the initialization vector in byte. Required for algorithms
@@ -277,7 +277,7 @@ type
     ///   block. It may be XORed with the next block cipher text for isntance.
     ///   That data "going into the next block encryption" is this feedback array
     /// </summary>
-    FFeedback: PByteArray;
+    FFeedback: PUInt8Array;
 
     /// <summary>
     ///   Size of FAdditionalBuffer in Byte
@@ -296,7 +296,7 @@ type
     ///   FAdditionalBuffer points to as well, and for some algorithms this part
     ///   of the memory may not be altered during initialization so it is
     ///   backupped to this memory location and restored after the IV got encrypted.
-    ///   In DoDone it needs to be restored as well to prevent any unwanted
+    ///   In Done it needs to be restored as well to prevent any unwanted
     ///   leftovers which might pose a security issue.
     /// </summary>
     FAdditionalBufferBackup: Pointer;
@@ -444,7 +444,8 @@ type
     constructor Create; override;
     /// <summary>
     ///   Frees internal structures and where necessary does so in a save way so
-    ///   that data in those structures cannot be "stolen".
+    ///   that data in those structures cannot be "stolen". It removes the key
+    ///   from RAM.
     /// </summary>
     destructor Destroy; override;
 
@@ -578,8 +579,9 @@ type
 
     /// <summary>
     ///   Properly finishes the cryptographic operation. It needs to be called
-    ///   at the end of encrypting or decrypting data, otherwise the last block
-    ///   or last byte of the data will not be properly processed.
+    ///   at the end of encrypting or decrypting data. It does NOT remove the
+    ///   keys from RAM (this will be done in the destruction only).
+    ///   You can continue encrypting/decrypting without calling Init() again.
     /// </summary>
     procedure Done; virtual;
 
@@ -616,8 +618,7 @@ type
     /// </exception>
     function EncodeRawByteString(const Source: RawByteString;
                                  Format: TDECFormatClass = nil): RawByteString;
-                                 deprecated; // please use EncodeBytes functions now
-                                             // or TCipherFormats.EncodeStringToString
+                                 deprecated 'please use EncodeBytes functions or TCipherFormats.EncodeStringToString now';
     /// <summary>
     ///   Decrypts the contents of a RawByteString. This method is deprecated
     ///   and should be replaced by a variant expecting TBytes as source in
@@ -648,7 +649,7 @@ type
     ///   is not a multiple of the algorithm's block size.
     /// </exception>
     function DecodeRawByteString(const Source: RawByteString;
-                                 Format: TDECFormatClass = nil): RawByteString; deprecated; // please use DecodeBytes functions now
+                                 Format: TDECFormatClass = nil): RawByteString; deprecated 'please use DecodeBytes functions now';
 
     /// <summary>
     ///   Encrypts the contents of a ByteArray.
@@ -697,18 +698,34 @@ type
     /// </exception>
     function DecodeBytes(const Source: TBytes; Format: TDECFormatClass): TBytes;
 
-    // CalcMACBytes deferred since the current implementation would neither be
-    // performant (that would require another TFormatBase.Encode variant from
-    // pointer to TBytes and that would require a new method name as overloads
-    // may not differ in return values only and it would require a lot of unit
-    // tests to get implemented. Deferred in particular also due to not yet
-    // really understanding the purpose of CalcMAC
-//    function CalcMACByte(Format: TDECFormatClass = nil): TBytes; overload;
+    /// <summary>
+    ///   Calculates a Cipher-based message authentication code (CMAC).
+    ///   This is the encryption of the last block concatenation feedback value.
+    ///   In decryption scenarios it can be used to check if the data arrived
+    ///   unaltered if the sender provides the MAC value along with the encrypted
+    ///   text. Both need to match after decrypting. Using this method is less
+    ///   secure than using the HMAC algorithm!
+    ///   This method cannot be used in the ECB cipher mode.
+    ///   Side effect: "Done" will be called if it hasn't been called before.
+    /// </summary>
+    /// <param name="Format">
+    ///   Optional parameter. Here a formatting method can be passed. The
+    ///   data to be decrypted will be formatted with this function, if one
+    ///   has been passed. Examples are hex or base 64 formatting.
+    ///   This is used for removing a formatting applied by the EncodeRawByteString
+    ///   method.
+    /// </param>
+    /// <returns>
+    ///   Calculates a Cipher-based message authentication code (CMAC).
+    /// </returns>
+    /// <exception cref="EDECCipherException">
+    ///   Exception raised the cipher mode is ECB.
+    /// </exception>
+    { TODO: Add unit test }
+    function CalcMAC(Format: TDECFormatClass = nil): RawByteString;
 
-    // Deprecated directive commented out, as replacement CalcMACByte has not
-    // been implemented yet, see remark above. Use case for CalcMAC is not clear
-    // yet either.
-    function CalcMAC(Format: TDECFormatClass = nil): RawByteString; overload; //deprecated; // please use the TBytes based overload;
+    /// Same as CalcMAC, but return TBytes
+    function CalcMACBytes(Format: TDECFormatClass = nil): TBytes;
 
     // properties
 
@@ -720,7 +737,7 @@ type
     /// <summary>
     ///   Provides access to the contents of the initialization vector
     /// </summary>
-    property InitVector: PByteArray
+    property InitVector: PUInt8Array
       read   FInitializationVector;
 
     /// <summary>
@@ -732,7 +749,7 @@ type
     ///   feedback array. The size usually depends on the block size of the
     ///   cipher algorithm.
     /// </summary>
-    property Feedback: PByteArray
+    property Feedback: PUInt8Array
       read   FFeedback;
     /// <summary>
     ///   Allows to query the current internal processing state
@@ -799,7 +816,7 @@ uses
   {$ELSE}
   System.TypInfo,
   {$ENDIF}
-  DECTypes, DECUtil;
+  DECUtil;
 
 {$IFOPT Q+}{$DEFINE RESTORE_OVERFLOWCHECKS}{$Q-}{$ENDIF}
 {$IFOPT R+}{$DEFINE RESTORE_RANGECHECKS}{$R-}{$ENDIF}
@@ -873,7 +890,7 @@ begin
 
   if MustAdditionalBufferSave then
     // buffer contents: FData, then FFeedback, then FBuffer then FAdditionalBuffer
-    FAdditionalBufferBackup := @PByteArray(FAdditionalBuffer)[FAdditionalBufferSize]
+    FAdditionalBufferBackup := @PUInt8Array(FAdditionalBuffer)[FAdditionalBufferSize]
   else
     FAdditionalBufferBackup := nil;
 
@@ -1003,19 +1020,19 @@ begin
     raise EDECCipherException.CreateRes(@sNoKeyMaterialGiven);
 
   if Length(IVector) > 0 then
-    {$IF CompilerVersion >= 24.0}
+    {$IFDEF HAVE_STR_LIKE_ARRAY}
     Init(Key[Low(Key)], Length(Key) * SizeOf(Key[Low(Key)]),
          IVector[Low(IVector)], Length(IVector) * SizeOf(IVector[Low(IVector)]), IFiller)
     {$ELSE}
     Init(Key[1], Length(Key) * SizeOf(Key[1]),
          IVector[1], Length(IVector) * SizeOf(IVector[1]), IFiller)
-    {$IFEND}
+    {$ENDIF}
   else
-    {$IF CompilerVersion >= 24.0}
+    {$IFDEF HAVE_STR_LIKE_ARRAY}
     Init(Key[Low(Key)], Length(Key) * SizeOf(Key[Low(Key)]), NullStr, 0, IFiller);
     {$ELSE}
     Init(Key[1], Length(Key) * SizeOf(Key[1]), NullStr, 0, IFiller);
-    {$IFEND}
+    {$ENDIF}
 end;
 
 
@@ -1052,19 +1069,19 @@ begin
     raise EDECCipherException.CreateRes(@sNoKeyMaterialGiven);
 
   if Length(IVector) > 0 then
-    {$IF CompilerVersion >= 24.0}
+    {$IFDEF HAVE_STR_LIKE_ARRAY}
     Init(Key[Low(Key)], Length(Key) * SizeOf(Key[Low(Key)]),
          IVector[Low(IVector)], Length(IVector) * SizeOf(IVector[Low(IVector)]), IFiller)
     {$ELSE}
     Init(Key[1], Length(Key) * SizeOf(Key[1]),
          IVector[1], Length(IVector) * SizeOf(IVector[1]), IFiller)
-    {$IFEND}
+    {$ENDIF}
   else
-    {$IF CompilerVersion >= 24.0}
+    {$IFDEF HAVE_STR_LIKE_ARRAY}
     Init(Key[Low(Key)], Length(Key) * SizeOf(Key[Low(Key)]), NullStr, 0, IFiller);
     {$ELSE}
     Init(Key[1], Length(Key) * SizeOf(Key[1]), NullStr, 0, IFiller);
-    {$IFEND}
+    {$ENDIF}
 end;
 {$ENDIF}
 
@@ -1098,13 +1115,13 @@ begin
   SetLength(b, 0);
   if Length(Source) > 0 then
   begin
-    {$IF CompilerVersion >= 24.0}
+    {$IFDEF HAVE_STR_LIKE_ARRAY}
     SetLength(b, Length(Source) * SizeOf(Source[Low(Source)]));
     DoEncode(@Source[low(Source)], @b[0], Length(Source) * SizeOf(Source[low(Source)]));
     {$ELSE}
     SetLength(b, Length(Source) * SizeOf(Source[1]));
     DoEncode(@Source[1], @b[0], Length(Source) * SizeOf(Source[1]));
-    {$IFEND}
+    {$ENDIF}
     Result := BytesToRawString(ValidFormat(Format).Encode(b));
   end;
 end;
@@ -1139,11 +1156,11 @@ begin
     // This has been fixed in 10.3.0 Rio
     b := ValidFormat(Format).Decode(BytesOf(Source));
 
-    {$IF CompilerVersion >= 24.0}
+    {$IFDEF HAVE_STR_LIKE_ARRAY}
     DoDecode(@b[0], @Result[Low(Result)], Length(Result) * SizeOf(Result[Low(Result)]));
     {$ELSE}
     DoDecode(@b[0], @Result[1], Length(Result) * SizeOf(Result[1]));
-    {$IFEND}
+    {$ENDIF}
   end;
 end;
 
@@ -1157,27 +1174,19 @@ begin
   end;
 end;
 
-
 function TDECCipher.CalcMAC(Format: TDECFormatClass): RawByteString;
 begin
-  Done;
+  Done; { TODO: This might be considered as unwanted side effect. Maybe we should instead raise an Exception if State is not csDone instead? This would also "teach" the user to don't forget to call "Done". }
   if FMode in [cmECBx] then
     raise EDECException.CreateRes(@sInvalidMACMode)
   else
     Result := ValidFormat(Format).Encode(FBuffer^, FBufferSize);
-  { TODO : How to rewrite? EncodeBytes cannot be called directly like that }
 end;
 
-//function TDECCipher.CalcMACByte(Format: TDECFormatClass): TBytes;
-//begin
-//  Done;
-//  if FMode in [cmECBx] then
-//    raise EDECCipherException.Create(sInvalidMACMode)
-//  else
-//  begin
-//    Result := System.SysUtils.BytesOf(ValidFormat(Format).Encode(FBuffer^, FBufferSize));
-//  end;
-//end;
+function TDECCipher.CalcMACBytes(Format: TDECFormatClass): TBytes;
+begin
+  Result := System.SysUtils.BytesOf(CalcMAC);
+end;
 
 {$IFDEF RESTORE_RANGECHECKS}{$R+}{$ENDIF}
 {$IFDEF RESTORE_OVERFLOWCHECKS}{$Q+}{$ENDIF}

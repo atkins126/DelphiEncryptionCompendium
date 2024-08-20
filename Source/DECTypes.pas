@@ -43,6 +43,12 @@ type
     {$IFEND}
   {$ENDIF}
 
+  /// <summary>
+  ///   Replacement for PByteArray
+  /// </summary>
+  PUInt8Array = ^TInt8Array;
+  TInt8Array = array[0..MaxInt-1] of Byte;
+
   PUInt32Array = ^TUInt32Array;
   TUInt32Array = array[0..1023] of UInt32;
 
@@ -87,7 +93,11 @@ type
   ///   Position within size in byte. For streams this may be a position
   ///   relative to the starting position for processing.
   /// </param>
+  {$ifdef HAVE_LAMBDAS}
   TDECProgressEvent = reference to procedure(Size, Pos: Int64; State: TDECProgressState);
+  {$else}
+  TDECProgressEvent = procedure(Size, Pos: Int64; State: TDECProgressState);
+  {$endif}
 
   // Exception Classes
 

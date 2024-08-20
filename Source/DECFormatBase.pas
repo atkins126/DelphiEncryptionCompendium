@@ -19,10 +19,9 @@
 /// Contains the base class for all the formatting classes
 /// </summary>
 unit DECFormatBase;
+{$INCLUDE DECOptions.inc}
 
 interface
-
-{$INCLUDE DECOptions.inc}
 
 uses
 {$IFDEF FPC}
@@ -451,11 +450,11 @@ var
 begin
   if Length(Data) > 0 then
   begin
-    {$IF CompilerVersion >= 24.0}
+    {$IFdef HAVE_STR_LIKE_ARRAY}
     DoEncode(Data[Low(Data)], b, Length(Data) * SizeOf(Data[Low(Data)]));
     {$ELSE}
     DoEncode(Data[1], b, Length(Data) * SizeOf(Data[1]));
-    {$IFEND}
+    {$ENDIF}
     Result := BytesToRawString(b);
   end
   else
@@ -504,11 +503,11 @@ var
 begin
   if Length(Data) > 0 then
   begin
-    {$IF CompilerVersion >= 24.0}
+    {$IFDEF HAVE_STR_LIKE_ARRAY}
     DoDecode(Data[Low(Data)], b, Length(Data) * SizeOf(Data[Low(Data)]));
     {$ELSE}
     DoDecode(Data[1], b, Length(Data) * SizeOf(Data[1]));
-    {$IFEND}
+    {$ENDIF}
     Result := BytesToRawString(b);
   end
   else
@@ -553,13 +552,13 @@ end;
 
 class function TDECFormat.IsValid(const Text: RawByteString): Boolean;
 begin
-  {$IF CompilerVersion >= 24.0}
+  {$IFDEF HAVE_STR_LIKE_ARRAY}
   Result := (Length(Text) = 0) or
     (DoIsValid(Text[Low(Text)], Length(Text) * SizeOf(Text[Low(Text)])));
   {$ELSE}
   Result := (Length(Text) = 0) or
     (DoIsValid(Text[1], Length(Text) * SizeOf(Text[1])));
-  {$IFEND}
+  {$ENDIF}
 end;
 
 class function TDECFormat.UpCaseBinary(b: Byte): Byte;

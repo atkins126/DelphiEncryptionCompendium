@@ -19,6 +19,7 @@
 ///   Unit containing all the KDF, MGF, HMAC and PBKDF2 algorithms
 /// </summary>
 unit DECHashAuthentication;
+{$INCLUDE DECOptions.inc}
 
 interface
 
@@ -30,7 +31,6 @@ uses
   {$ENDIF}
   DECBaseClass, DECHashBase, DECHashInterface, DECTypes , DECFormatBase;
 
-{$INCLUDE DECOptions.inc}
 
 type
   /// <summary>
@@ -116,7 +116,7 @@ type
     class function MGF1(const Data; DataSize, MaskSize: Integer): TBytes; overload;
     /// <summary>
     ///   Mask generation: generates an output based on the data given which is
-    ///   similar to a hash function but incontrast does not have a fixed output
+    ///   similar to a hash function but in contrast does not have a fixed output
     ///   length. Use of a MGF is desirable in cases where a fixed-size hash
     ///   would be inadequate. Examples include generating padding, producing
     ///   one time pads or keystreams in symmetric key encryption, and yielding
@@ -341,7 +341,7 @@ type
 
     /// <summary>
     ///   Mask generation: generates an output based on the data given which is
-    ///   similar to a hash function but incontrast does not have a fixed output
+    ///   similar to a hash function but in contrast does not have a fixed output
     ///   length. Use of a MGF is desirable in cases where a fixed-size hash
     ///   would be inadequate. Examples include generating padding, producing
     ///   one time pads or keystreams in symmetric key encryption, and yielding
@@ -372,7 +372,7 @@ type
                         Index: UInt32 = 1): TBytes; overload;
     /// <summary>
     ///   Mask generation: generates an output based on the data given which is
-    ///   similar to a hash function but incontrast does not have a fixed output
+    ///   similar to a hash function but in contrast does not have a fixed output
     ///   length. Use of a MGF is desirable in cases where a fixed-size hash
     ///   would be inadequate. Examples include generating padding, producing
     ///   one time pads or keystreams in symmetric key encryption, and yielding
@@ -510,7 +510,8 @@ type
     ///   Number of bytes within the stream over which to calculate the hash value
     /// </param>
     /// <param name="HashResult">
-    ///   In this byte array the calculated hash value will be returned
+    ///   In this byte array the calculated hash value will be returned. The
+    ///   array will be automatically sized suitably.
     /// </param>
     /// <param name="OnProgress">
     ///   Optional callback routine. It can be used to display the progress of
@@ -912,7 +913,7 @@ type
       write  SetSalt;
   end;
 
-  {$IF CompilerVersion < 28.0}
+  {$IFNDEF HAVE_ASSIGN_ARRAY}
   /// <summary>
   ///   Class helper for implementing array concatenation which is not available
   ///   in Delphi XE6 or lower.
@@ -923,7 +924,7 @@ type
   TArrHelper = class
     class procedure AppendArrays<T>(var A: TArray<T>; const B: TArray<T>);
   end;
-  {$IFEND}
+  {$ENDIF}
 
   /// <summary>
   ///   Meta class for the class containing the authentication methods
@@ -964,7 +965,6 @@ class function TDECHashAuthentication.KDFInternal(const Data; DataSize: Integer;
 var
   I, n,
   Rounds, DigestBytes : Integer;
-  Dest                : PByteArray;
   Count               : UInt32;
   HashInstance        : TDECHashAuthentication;
 begin
@@ -979,8 +979,6 @@ begin
   try
     Rounds := (MaskSize + DigestBytes - 1) div DigestBytes;
     SetLength(Result, Rounds * DigestBytes);
-    Dest := @Result[0];
-
 
     if (KDFType = ktKDF2) then
       n := 1
@@ -1005,7 +1003,7 @@ begin
 
       HashInstance.Calc(Seed, SeedSize);
       HashInstance.Done;
-      Move(HashInstance.Digest[0], Dest[(I) * DigestBytes], DigestBytes);
+      Move(HashInstance.Digest[0], Result[(I) * DigestBytes], DigestBytes);
 
       inc(n);
     end;
@@ -1237,6 +1235,7 @@ var
   InnerKeyPad, OuterKeyPad: TBytes;
   SaltEx, T, U, TrimmedKey: TBytes;
 begin
+  SetLength(Result, 0);
   Hash := TDECHashAuthenticationClass(self).Create;
   try
     // Setup needed parameters
@@ -1330,7 +1329,7 @@ end;
 
 class function TDECHashAuthentication.PBKDF2(const Password, Salt: RawByteString; Iterations: Integer; KeyLength: Integer): TBytes;
 begin
-  result := PBKDF2(BytesOf(Password), BytesOf(Salt), Iterations, KeyLength);
+  Result := PBKDF2(BytesOf(Password), BytesOf(Salt), Iterations, KeyLength);
 end;
 
 { TDECHashExtended }
@@ -1508,7 +1507,7 @@ end;
 
 { TArrHelper }
 
-{$IF CompilerVersion < 28.0}
+{$IFNDEF HAVE_ASSIGN_ARRAY}
 class procedure TArrHelper.AppendArrays<T>(var A: TArray<T>; const B: TArray<T>);
 var
   i, L: Integer;
@@ -1518,7 +1517,7 @@ begin
   for i := 0 to High(B) do
     A[L + i] := B[i];
 end;
-{$IFEND}
+{$ENDIF}
 
 { TDECPasswordHash }
 

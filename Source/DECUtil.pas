@@ -19,10 +19,10 @@
 ///   Utility functions
 /// </summary>
 unit DECUtil;
+{$INCLUDE DECOptions.inc}
 
 interface
 
-{$INCLUDE DECOptions.inc}
 
 uses
   {$IFDEF FPC}
@@ -266,6 +266,16 @@ const
    $27, $A7, $67, $E7, $17, $97, $57, $D7, $37, $B7, $77, $F7, $0F, $8F,
    $4F, $CF, $2F, $AF, $6F, $EF, $1F, $9F, $5F, $DF, $3F, $BF, $7F, $FF);
 
+{$ifdef FPC}
+{$include fpc\DECUtil.inc}
+{$endif}
+
+{$ifdef X64ASM}
+  {$include x86_64\DECUtil.inc}
+{$else}{$ifdef X86ASM}
+  {$include x86\DECUtil.inc}
+{$endif}{$endif}
+
 function ReverseBits(Source: UInt32): UInt32;
 begin
   Result := (ReverseBitLookupTable256[Source and $FF] shl 24) or
@@ -320,22 +330,15 @@ begin
 end;
 {$ENDIF !X86ASM}
 
+{$IFNDEF SwapUInt32_asm}
 function SwapUInt32(Source: UInt32): UInt32;
-{$IF defined(X86ASM) or defined(X64ASM)}
-  asm
-  {$IFDEF X64ASM}
-    MOV   EAX, ECX
-  {$ENDIF X64ASM}
-    BSWAP EAX
-  end;
-{$ELSE PUREPASCAL}
 begin
   Result := Source shl 24 or
             Source shr 24 or
             Source shl 8 and $00FF0000 or
             Source shr 8 and $0000FF00;
 end;
-{$IFEND PUREPASCAL}
+{$ENDIF PUREPASCAL}
 
 procedure SwapUInt32Buffer(const Source; var Dest; Count: Integer);
 {$IFDEF X86ASM}
@@ -367,15 +370,9 @@ begin
 end;
 {$ENDIF !X86ASM}
 
+
+{$IFNDEF SwapInt64_asm}
 function SwapInt64(Source: Int64): Int64;
-{$IFDEF X86ASM}
-asm
-      MOV     EDX,Source.DWord[0]
-      MOV     EAX,Source.DWord[4]
-      BSWAP   EDX
-      BSWAP   EAX
-end;
-{$ELSE !X86ASM}
 var
   L, H: Cardinal;
 begin
@@ -516,21 +513,21 @@ begin
   begin
     Stream.Position := Position;
     Size := SizeToProtect;
-    {$IF CompilerVersion >= 24.0}
+    {$IFDEF HAVE_STR_LIKE_ARRAY}
     FillChar(Buffer[Low(Buffer)], BufferSize, WipeBytes[Count]);
     {$ELSE}
     FillChar(Buffer[1], BufferSize, WipeBytes[Count]);
-    {$IFEND}
+    {$ENDIF}
     while Size > 0 do
     begin
       Bytes := Size;
       if Bytes > BufferSize then
         Bytes := BufferSize;
-      {$IF CompilerVersion >= 24.0}
+      {$IFDEF HAVE_STR_LIKE_ARRAY}
       Stream.Write(Buffer[Low(Buffer)], Bytes);
       {$ELSE}
       Stream.Write(Buffer[1], Bytes);
-      {$IFEND}
+      {$ENDIF}
       Dec(Size, Bytes);
     end;
   end;
@@ -550,11 +547,11 @@ begin
   if Length(Source) > 0 then
   begin
     System.UniqueString(Source);
-    {$IF CompilerVersion >= 24.0}
+    {$IFDEF HAVE_STR_LIKE_ARRAY}
     ProtectBuffer(Pointer(Source)^, Length(Source) * SizeOf(Source[Low(Source)]));
     {$ELSE}
     ProtectBuffer(Pointer(Source)^, Length(Source) * SizeOf(Source[1]));
-    {$IFEND}
+    {$ENDIF}
     Source := '';
   end;
 end;
@@ -566,40 +563,42 @@ begin
     // UniqueString(Source); cannot be called with a RawByteString as there is
     // no overload for it, so we need to call our own one.
     DECUtilRawByteStringHelper.UniqueString(Source);
-    {$IF CompilerVersion >= 24.0}
+    {$IFDEF HAVE_STR_LIKE_ARRAY}
     ProtectBuffer(Pointer(Source)^, Length(Source) * SizeOf(Source[Low(Source)]));
     {$ELSE}
     ProtectBuffer(Pointer(Source)^, Length(Source) * SizeOf(Source[1]));
-    {$IFEND}
+    {$ENDIF}
     Source := '';
   end;
 end;
 
 {$IFNDEF NEXTGEN}
+{$IFDEF ANSISTRINGSUPPORTED} //{$ifndef FPC}   // FPC use RawByteString == AnsiString
 procedure ProtectString(var Source: AnsiString); overload;
 begin
   if Length(Source) > 0 then
   begin
     System.UniqueString(Source);
-    {$IF CompilerVersion >= 24.0}
+    {$IFDEF HAVE_STR_LIKE_ARRAY}
     ProtectBuffer(Pointer(Source)^, Length(Source) * SizeOf(Source[Low(Source)]));
     {$ELSE}
     ProtectBuffer(Pointer(Source)^, Length(Source) * SizeOf(Source[1]));
-    {$IFEND}
+    {$ENDIF}
     Source := '';
   end;
 end;
+{$endif FPC}
 
 procedure ProtectString(var Source: WideString); overload;
 begin
   if Length(Source) > 0 then
   begin
     System.UniqueString(Source); // for OS <> Win, WideString is not RefCounted on Win
-    {$IF CompilerVersion >= 24.0}
+    {$IFDEF HAVE_STR_LIKE_ARRAY}
     ProtectBuffer(Pointer(Source)^, Length(Source) * SizeOf(Source[Low(Source)]));
     {$ELSE}
     ProtectBuffer(Pointer(Source)^, Length(Source) * SizeOf(Source[1]));
-    {$IFEND}
+    {$ENDIF}
     Source := '';
   end;
 end;
@@ -611,11 +610,11 @@ begin
   if Length(Source) > 0 then
   begin
     // determine lowest string index for handling of ZeroBasedStrings
-    {$IF CompilerVersion >= 24.0}
+    {$IFDEF HAVE_STR_LIKE_ARRAY}
     Move(Source[0], Result[Low(result)], Length(Source));
     {$ELSE}
     Move(Source[0], Result[1], Length(Source));
-    {$IFEND}
+    {$ENDIF}
   end;
 end;
 
