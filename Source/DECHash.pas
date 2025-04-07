@@ -4782,9 +4782,9 @@ begin
 
   if (Rate + Capacity <> 1600) or (Rate = 0) or (Rate >= 1600) or
      ((Rate and 63) <> 0) then
-    raise EDECHashException.CreateFmt(sHashInitFailure, ['SHA3',
-                                                         'rate: ' + IntToStr(Rate) +
-                                                         ' capacity: ' + IntToStr(Capacity)]);
+    raise EDECHashException.CreateResFmt(@sHashInitFailure, ['SHA3',
+                                                             'rate: ' + IntToStr(Rate) +
+                                                             ' capacity: ' + IntToStr(Capacity)]);
 
   FSpongeState.Rate     := Rate;
   FSpongeState.Capacity := Capacity;
@@ -4974,8 +4974,7 @@ begin
 
   // Only multiple of 8 bits are allowed, truncation must be done at user level
   if OutputLength and 7 <> 0 then
-    raise EDECHashException.CreateFmt(sSHA3AbsorbFailure,
-                                 [OutputLength, 'true']);
+    raise EDECHashException.CreateResFmt(@sSHA3AbsorbFailure, [OutputLength, 'true']);
 
   i := 0;
   while i < OutputLength do
@@ -5023,9 +5022,9 @@ begin
   // queue or algorithm is already in squeezing state
   if (FSpongeState.BitsInQueue and 7 <> 0) or FSpongeState.SqueezeActive then
   begin
-    raise EDECHashException.CreateFmt(sSHA3AbsorbFailure,
-                                     [FSpongeState.BitsInQueue,
-                                      BoolToStr(FSpongeState.SqueezeActive, true)]);
+    raise EDECHashException.CreateResFmt(@sSHA3AbsorbFailure,
+                                         [FSpongeState.BitsInQueue,
+                                         BoolToStr(FSpongeState.SqueezeActive, true)]);
   end;
 
   i := 0;
@@ -5277,13 +5276,13 @@ var
   i       : Integer;
 begin
   if (DataSize > MaxPasswordLength) then
-    raise EDECHashException.CreateFmt(sPasswordTooLong, [MaxPasswordLength]);
+    raise EDECHashException.CreateResFmt(@sPasswordTooLong, [MaxPasswordLength]);
 
   // While this should normally be caught on setting salt already it is there
   // especially to catch cases where no salt has been specified yet.
   if (Length(FSalt) < MinSaltLength) or (Length(FSalt) > MaxSaltLength) then
-    raise EDECHashException.CreateFmt(sWrongSaltLength,
-                                      [MinSaltLength, MaxSaltLength]);
+    raise EDECHashException.CreateResFmt(@sWrongSaltLength,
+                                         [MinSaltLength, MaxSaltLength]);
 
   // This automatically "adds" the required #0 terminator at the end of the password
   SetLength(PwdData, DataSize + 1);
@@ -5312,9 +5311,9 @@ const
 begin
   // number of rounds = 2^cost, loop includes 0
   if (FCost = 31) then
-    rounds := MaxLongint
+    rounds := High(UInt32)
   else
-    rounds := (Int32(1) shl FCost) - 1;
+    rounds := UInt32(UInt32(1) shl FCost) - 1;
 
   // Just copy the boxes into the context
   ExpandKey(FSalt, Password, PasswordSize);
@@ -5612,7 +5611,7 @@ begin
   if (Value in [MinCost..MaxCost]) then
     FCost := Value
   else
-    raise EDECHashException.CreateFmt(sCostFactorInvalid, [MinCost, MaxCost]);
+    raise EDECHashException.CreateResFmt(@sCostFactorInvalid, [MinCost, MaxCost]);
 end;
 
 function THash_BCrypt.SplitTestVector(const Vector     : string;

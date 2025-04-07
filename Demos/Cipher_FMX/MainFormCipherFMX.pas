@@ -21,9 +21,10 @@ interface
 
 uses
   System.SysUtils, System.Types, System.UITypes, System.Classes, System.Variants,
+  System.Rtti,
   FMX.Types, FMX.Controls, FMX.Forms, FMX.Graphics, FMX.Dialogs, FMX.Layouts,
-  FMX.ListBox, FMX.Controls.Presentation, FMX.StdCtrls, System.Rtti,
-  FMX.Grid, FMX.ScrollBox, FMX.ComboEdit, FMX.Edit, FMX.Platform,
+  FMX.ListBox, FMX.Controls.Presentation, FMX.StdCtrls,
+  FMX.Grid, FMX.ScrollBox, FMX.ComboEdit, FMX.Edit, FMX.Platform, FMX.Objects,
   {$IF RTLVersion < 31}
   {$ELSE}
   FMX.Grid.Style,
@@ -78,6 +79,16 @@ type
     ComboBoxPlainTextFormatting: TComboBox;
     Label6: TLabel;
     ComboBoxCipherTextFormatting: TComboBox;
+    ButtonCreateKey: TButton;
+    ButtonCreateIV: TButton;
+    ComboBoxKeyIVFormat: TComboBox;
+    Label4: TLabel;
+    LabelLenPlainText: TLabel;
+    LabelLenChiffreText: TLabel;
+    TextPassed: TText;
+    TextFailed: TText;
+    ComboBoxPaddingMode: TComboBox;
+    Label15: TLabel;
     procedure FormCreate(Sender: TObject);
     procedure ComboBoxCipherAlgorithmChange(Sender: TObject);
     procedure ComboBoxChainingMethodChange(Sender: TObject);
@@ -86,6 +97,10 @@ type
     procedure ButtonDecryptClick(Sender: TObject);
     procedure ButtonCopyClick(Sender: TObject);
     procedure FormResize(Sender: TObject);
+    procedure ButtonCreateKeyClick(Sender: TObject);
+    procedure ButtonCreateIVClick(Sender: TObject);
+    procedure ComboBoxKeyIVFormatChange(Sender: TObject);
+    procedure EditPlainCipherTextChangeTracking(Sender: TObject);
   private
     /// <summary>
     ///   Add all registered formats to the combobox and select TFormat_Copy
@@ -152,6 +167,10 @@ type
     /// </summary>
     function GetSelectedCipherMode: TCipherMode;
     /// <summary>
+    ///   Returns the selected padding mode
+    /// </summary>
+    function GetSelectedPaddingMode: TPaddingMode;
+    /// <summary>
     ///   If a cipher and block chaining mode is selected which provide
     ///   authentication capabilities show the authentication fields. Also show
     ///   authentication status info in the grid.
@@ -179,7 +198,7 @@ type
     ///   Get the clipboard instance to be able to put something in it
     /// </summary>
     /// <param name="Clipboard">
-    ///   If successfull the aquired clipboard object
+    ///   The aquired clipboard object, if successfull
     /// </param>
     /// <returns>
     ///   true if the clipboard instance could be aquired
@@ -193,11 +212,20 @@ type
     /// </param>
     procedure StringToClipboard(const s: string);
     /// <summary>
-    ///   Returns the list of block chaining modes which do not have a filler byte
+    ///   Fills the padding mode combobox with the available modes
     /// </summary>
-    function GetCipherModesWithoutFiller:TCipherModes;
-  public
-    { Public-Deklarationen }
+    procedure InitPaddingModesCombo;
+  private
+    /// <summary>
+    ///   Formatting class used to format the encryption/decryption key and
+    ///   initialization vector
+    /// </summary>
+    FKeyAndIVFormatting: TDECFormatClass;
+    /// <summary>
+    ///   To compare the decrypted text with the last encrypted plain text,
+    ///   the plain text is saved.
+    /// </summary>
+    FLastEncryptedPlainText: string;
   end;
 
 var
@@ -208,7 +236,7 @@ implementation
 uses
   System.TypInfo, Generics.Collections,
   DECBaseClass, DECFormat,
-  DECCipherFormats, DECCiphers, DECUtil, DECCipherInterface
+  DECCipherFormats, DECCiphers, DECUtil, DECCipherInterface, DECRandom
   {$IFDEF Android}
   ,
   Androidapi.JNI.GraphicsContentViewText,
@@ -222,7 +250,8 @@ function TFormMain.TryGetClipboardService(out Clipboard: IFMXClipboardService): 
 begin
   Result := TPlatformServices.Current.SupportsPlatformService(IFMXClipboardService);
   if Result then
-    Clipboard := IFMXClipboardService(TPlatformServices.Current.GetPlatformService(IFMXClipboardService));
+    Clipboard := IFMXClipboardService(
+      TPlatformServices.Current.GetPlatformService(IFMXClipboardService));
 end;
 
 procedure TFormMain.StringToClipboard(const s: string);
@@ -233,10 +262,67 @@ begin
     ClipBoard.SetClipboard(s);
 end;
 
+procedure TFormMain.ButtonCreateKeyClick(Sender: TObject);
+var
+  KeyFormat: TDECFormatClass;
+  Context : TCipherContext;
+  RandBytes: TBytes;
+begin
+  Assert(ComboBoxCipherAlgorithm.ItemIndex >= 0, 'No cipher algorithm selected');
+  // creates a randomized encryption/decryption key in the key format selected
+
+  // Determinhe the selected key format
+  KeyFormat := TDECFormat.ClassByName(
+                 ComboBoxKeyIVFormat.Items[ComboBoxKeyIVFormat.ItemIndex]);
+  // This failed. It should not happen though, because all formats should be registered
+  Assert(Assigned(KeyFormat), 'Missing format');
+
+  // Get metadata for the selected encryption algorithm. We need the key length
+  Context := TDECCipher.ClassByName(
+    ComboBoxCipherAlgorithm.Items[ComboBoxCipherAlgorithm.ItemIndex]).Context;
+  // Create a random key using DEC's pseudo random number generator and write the
+  // formatted output into the edit
+  RandBytes    := RandomBytes(Context.KeySize);
+  EditKey.Text := StringOf(KeyFormat.Encode(RandBytes));
+end;
+
+procedure TFormMain.ButtonCreateIVClick(Sender: TObject);
+var
+  IVFormat: TDECFormatClass;
+  Context : TCipherContext;
+  RandBytes: TBytes;
+begin
+  Assert(ComboBoxCipherAlgorithm.ItemIndex >= 0, 'No algo selected');
+  // Creates a randomized initialization vector. That is one possible way to
+  // generate an initialization vector IV. The IV should be a new and unique
+  // value for each use of the encryption algorithm. It may be stored along
+  // with the encrypted data as it is needed by the receiver to decrypt the
+  // data. Not using a unique value for this is a security problem as it makes
+  // cracking the encryption easier. When decrypting data the very same IV which
+  // was used for encrypting the data needs to be set as IV, so this button is
+  // useless in decryption scenarios! The filler byte one can specify is used to
+  // fill up any IV which is shorter than the length of the encryption key.
+
+  // Determine the selected IV format
+  IVFormat := TDECFormat.ClassByName(ComboBoxKeyIVFormat.Items[ComboBoxKeyIVFormat.ItemIndex]);
+
+  Assert(Assigned(IVFormat), 'Missing format');
+  // get meta data for the encryption/decryption algorithm used. The lenght of
+  // the IV usually matches the length of the encryption key
+  Context := TDECCipher.ClassByName(
+    ComboBoxCipherAlgorithm.Items[ComboBoxCipherAlgorithm.ItemIndex]).Context;
+
+  // Create a random IV using DEC's pseudo random number generator and write the
+  // formatted output into the edit
+  RandBytes           := RandomBytes(Context.BlockSize);
+  EditInitVector.Text := StringOf(IVFormat.Encode(RandBytes));
+end;
+
 procedure TFormMain.ButtonCopyClick(Sender: TObject);
 var
   s : string;
 begin
+  // Copy entered data into the clipboard
   s := '//start' + sLineBreak +
        'Cipher: ' +
          ComboBoxCipherAlgorithm.Items[ComboBoxCipherAlgorithm.ItemIndex] +
@@ -244,9 +330,11 @@ begin
        'Mode: ' +
          ComboBoxChainingMethod.Items[ComboBoxChainingMethod.ItemIndex] +
          sLineBreak +
-       'Key: ' + EditKey.Text + sLineBreak +
-       'Init vector: ' + EditInitVector.Text + sLineBreak +
-       'Filler: ' + EditFiller.Text + sLineBreak +
+       'Padding mode: ' + ComboBoxPaddingMode.Items[ComboBoxPaddingMode.ItemIndex] +
+         sLineBreak +
+       'Key: '                 + EditKey.Text + sLineBreak +
+       'Init vector: '         + EditInitVector.Text + sLineBreak +
+       'Filler: '              + EditFiller.Text + sLineBreak +
        'Data to auhenticate: ' + EditAuthenticatedData.Text + sLineBreak +
        'Expected authentication result: ' +
          EditExpectedAuthenthicationResult.Text + sLineBreak +
@@ -258,8 +346,8 @@ begin
        'Format output: ' +
          ComboBoxCipherTextFormatting.Items[ComboBoxCipherTextFormatting.ItemIndex] +
          sLineBreak +
-       'Plain text: ' + EditPlainText.Text + sLineBreak +
-       'Cipher text: ' + EditCipherText.Text + sLineBreak +
+       'Plain text: '   + EditPlainText.Text + sLineBreak +
+       'Cipher text: '  + EditCipherText.Text + sLineBreak +
        'Demo version: ' + LabelVersion.Text + sLineBreak +
        '//end';
   StringToClipboard(s);
@@ -273,16 +361,20 @@ var
   CipherTextBuffer     : TBytes;
   PlainTextBuffer      : TBytes;
   AuthenticationOK     : Boolean; // for authenticated ciphers: is the calculated
-                              // authentication result value correct?
+                                  // authentication result value correct?
 begin
+  // Decrypts the entered encrypted data using the settings made
+
+  // Determine desired output format
   if not GetFormatSettings(PlainTextFormatting, CipherTextFormatting) then
     exit;
 
   try
+    // Create an instance for the cypher used to decrypt and initialize its properties
     Cipher := GetInitializedCipherInstance;
 
     try
-      CipherTextBuffer  := System.SysUtils.BytesOf(EditCipherText.Text);
+      CipherTextBuffer := DECUtil.RawStringToBytes(RawByteString(EditCipherText.Text));
 
       if CipherTextFormatting.IsValid(CipherTextBuffer) then
       begin
@@ -291,12 +383,18 @@ begin
         AuthenticationOK := false;
 
         try
-          PlainTextBuffer := (Cipher as TDECFormattedCipher).DecodeBytes(
-                            CipherTextFormatting.Decode(CipherTextBuffer));
+          // the real decryption
+          CipherTextBuffer := CipherTextFormatting.Decode(CipherTextBuffer);
+          LabelLenChiffreText.Text := Format('Buffer: %d bytes, Formatted: %d chars',
+            [length(CipherTextBuffer), length(EditCipherText.Text)]);
+
+          PlainTextBuffer := (Cipher as TDECFormattedCipher).DecodeBytes(CipherTextBuffer);
+
           // in case of an authenticated cipher mode like cmGCM the Done method
           // will raise an exception when the calculated authentication value does
           // not match the given expected one set in SetAuthenticationParams().
           (Cipher as TDECFormattedCipher).Done;
+
           // If we managed to get to here, the calculated authentication value is
           // ok if we're in an authenticated mode and have entered an expected value.
           if (length(EditExpectedAuthenthicationResult.Text) > 0) and
@@ -305,12 +403,19 @@ begin
             AuthenticationOK := true;
         except
           On e:Exception do
+          begin
+            TextPassed.Visible := false;
+            TextFailed.Visible := true;
+
             ShowMessage('Decryption failure:' + sLineBreak + e.Message,
                         TMsgDlgType.mtError);
+            exit;
+          end;
         end;
 
         if Cipher.IsAuthenticated then
         begin
+          // Display calculated authentication value
           EditCalculatedAuthenticationValue.Text :=
             StringOf(TFormat_HEXL.Encode(Cipher.CalculatedAuthenticationResult));
 
@@ -319,7 +424,33 @@ begin
                         TMsgDlgType.mtInformation);
         end;
 
-        EditPlainText.Text := string(DECUtil.BytesToRawString(PlainTextFormatting.Encode(PlainTextBuffer)));
+        // Transform decrypted data into the requested display/output format
+        // and display it
+        EditPlainText.Text     := DECUtil.BytesToString(PlainTextFormatting.Encode(PlainTextBuffer));
+        LabelLenPlainText.Text := Format('Buffer: %d bytes, Formatted: %d chars',
+                                         [length(PlainTextBuffer), length(EditPlainText.Text)]);
+
+        if FLastEncryptedPlainText.IsEmpty then
+        begin
+          TextPassed.Visible := false;
+          TextFailed.Visible := false;
+        end
+        else
+          // We have remembered the last enetered plain text and can compare
+          // with that. This can be used to demo that this plain text I just
+          // encrypted wa sproperly decrypted in my immediate decryption demo
+          if FLastEncryptedPlainText = EditPlainText.Text then
+          begin
+            TextPassed.Visible := true;
+            TextFailed.Visible := false;
+          end
+          else
+          begin
+            // The demo failed, most likely because the decryption was done on
+            // something else than the encryption of that last used plain text
+            TextPassed.Visible := false;
+            TextFailed.Visible := true;
+          end;
       end
       else
         ShowMessage('Input has wrong format', TMsgDlgType.mtError);
@@ -340,31 +471,52 @@ var
   InputBuffer      : TBytes;
   OutputBuffer     : TBytes;
 begin
+  TextPassed.Visible := false;
+  TextFailed.Visible := false;
+
   if not GetFormatSettings(InputFormatting, OutputFormatting) then
     exit;
 
   try
+    // Create an instance for the cypher used to encrypt and initialize its properties
     Cipher := GetInitializedCipherInstance;
 
     try
-      InputBuffer  := System.SysUtils.BytesOf(EditPlainText.Text);
+      if (InputFormatting = TFormat_UTF8) or (InputFormatting = TFormat_Copy) then
+        InputBuffer := DECUtil.StringToBytes(EditPlainText.Text)
+      else
+        InputBuffer := DECUtil.RawStringToBytes(RawByteString(EditPlainText.Text));
 
+      // Check if the data to be encrypted matches the selected format
       if InputFormatting.IsValid(InputBuffer) then
       begin
         // Set all authentication related properties
         SetAuthenticationParams(Cipher);
 
         try
-          OutputBuffer := (Cipher as TDECFormattedCipher).EncodeBytes(InputFormatting.Decode(InputBuffer));
+          // transform the text to be encrypted from the format given into a byte buffer
+          InputBuffer := InputFormatting.Decode(InputBuffer);
+          LabelLenPlainText.Text := Format('Buffer: %d bytes, Formatted: %d chars',
+            [length(InputBuffer), length(EditPlainText.Text)]);
+
+          // Perform the actual encryption
+          OutputBuffer := (Cipher as TDECFormattedCipher).EncodeBytes(InputBuffer);
           (Cipher as TDECFormattedCipher).Done;
+          FLastEncryptedPlainText := EditPlainText.Text;
         except
           On e:Exception do
             ShowMessage('Encryption failure:' + sLineBreak + e.Message,
                         TMsgDlgType.mtError);
         end;
 
-        EditCipherText.Text := string(DECUtil.BytesToRawString(OutputFormatting.Encode(OutputBuffer)));
+        // display the encrypted text in the selected output format
+        EditCipherText.Text := string(DECUtil.BytesToRawString(
+                                 OutputFormatting.Encode(OutputBuffer)));
+        LabelLenChiffreText.Text := Format('Buffer: %d bytes, Formatted: %d chars',
+            [length(OutputBuffer), length(EditCipherText.Text)]);
 
+        // If the algorithm is an authenticated cipher display the calculated
+        // authentication value
         if Cipher.IsAuthenticated then
           EditCalculatedAuthenticationValue.Text :=
             StringOf(TFormat_HEXL.Encode(Cipher.CalculatedAuthenticationResult));
@@ -381,27 +533,66 @@ begin
 end;
 
 procedure TFormMain.ComboBoxChainingMethodChange(Sender: TObject);
-var
-  NeedsFiller: Boolean;
 begin
   // this on change handler is already called during form creation but at that
   // point the cipher algorithm combo may not have been fully initialized yet so
   // we must not update authentication status yet.
   if ComboBoxCipherAlgorithm.ItemIndex >= 0 then
     UpdateAuthenticationStatus;
+end;
 
-  // does the selected mode requiring padding?
-  // ECB mode doesn't need filler as we expect the user to enter completely
-  // filled blocks
-  NeedsFiller             := not (GetSelectedCipherMode in [cmGCM, cmECBx]);
-  LabelFillerByte.Enabled := NeedsFiller;
-  EditFiller.Enabled      := NeedsFiller;
+procedure TFormMain.ComboBoxKeyIVFormatChange(Sender: TObject);
+var
+  NewFormat: TDECFormatClass;
+  Raw      : RawByteString;
+begin
+  // determine the desired input format for the initialization vector IV
+  NewFormat := TDECFormat.ClassByName(
+                 ComboBoxKeyIVFormat.Items[ComboBoxKeyIVFormat.ItemIndex]);
+
+  if not EditKey.Text.IsEmpty then
+  begin
+    if FKeyAndIVFormatting.IsValid(RawByteString(EditKey.Text)) then
+    begin
+      Raw                := FKeyAndIVFormatting.Decode(RawByteString(EditKey.Text));
+      EditKey.FilterChar := NewFormat.FilterChars;
+      EditKey.Text       := string(NewFormat.Encode(Raw));
+    end
+    else
+      EditKey.FilterChar := NewFormat.FilterChars;
+  end
+  else
+    EditKey.FilterChar := NewFormat.FilterChars;
+
+  if not EditInitVector.Text.IsEmpty then
+  begin
+    if FKeyAndIVFormatting.IsValid(RawByteString(EditInitVector.Text)) then
+    begin
+      Raw := FKeyAndIVFormatting.Decode(RawByteString(EditInitVector.Text));
+      EditInitVector.FilterChar := NewFormat.FilterChars;
+      EditInitVector.Text := string(NewFormat.Encode(Raw));
+    end
+    else
+      EditInitVector.FilterChar := NewFormat.FilterChars;
+  end
+  else
+    EditInitVector.FilterChar := NewFormat.FilterChars;
+
+  FKeyAndIVFormatting := NewFormat;
+end;
+
+procedure TFormMain.EditPlainCipherTextChangeTracking(Sender: TObject);
+begin
+  // when plain text changed hide some labels related to authentication result
+  TextPassed.Visible := false;
+  TextFailed.Visible := false;
 end;
 
 procedure TFormMain.ComboBoxCipherAlgorithmChange(Sender: TObject);
 var
   Context : TCipherContext;
 begin
+  // if a different cipher algorithm is selected update the displayed meta data
   Context := TDECCipher.ClassByName(
     ComboBoxCipherAlgorithm.Items[ComboBoxCipherAlgorithm.ItemIndex]).Context;
 
@@ -442,6 +633,8 @@ procedure TFormMain.FormCreate(Sender: TObject);
 var
   AppService : IFMXApplicationService;
 begin
+  // Display program version fetched from the binary. The platform service
+  // only supports a shorter format.
   if TPlatformServices.Current.SupportsPlatformService(IFMXApplicationService,
                                                        IInterface(AppService)) then
     LabelVersion.Text := format(LabelVersion.Text, [AppService.AppVersion])
@@ -455,10 +648,10 @@ end;
 
 procedure TFormMain.FormResize(Sender: TObject);
 begin
-  LayoutTop.Width := self.Width - 20;
+  LayoutTop.Width            := self.Width - 20;
   LayoutCipherSettings.Width := self.Width - 20;
   LayoutAuthentication.Width := self.Width - 20;
-  LayoutEncrypt.Width := self.Width - 20;
+  LayoutEncrypt.Width        := self.Width - 20;
 end;
 
 procedure TFormMain.FormShow(Sender: TObject);
@@ -476,15 +669,24 @@ begin
   Result.Mode := GetSelectedCipherMode;
 end;
 
-function TFormMain.GetCipherModesWithoutFiller: TCipherModes;
+procedure TFormMain.InitPaddingModesCombo;
+var
+  PaddingMode: TPaddingMode;
 begin
-  Result := [cmGCM, cmECBx];
+  // add all available padding modes to the combo box
+  ComboBoxPaddingMode.Clear;
+
+  for PaddingMode := low(TPaddingMode) to high(TPaddingMode) do
+    ComboBoxPaddingMode.Items.Add(System.TypInfo.GetEnumName(TypeInfo(TPaddingMode),
+                                  Integer(PaddingMode)));
+
+  ComboBoxPaddingMode.ItemIndex := 0;
 end;
 
 function TFormMain.GetFormatSettings(var PlainTextFormatting,
-  CipherTextFormatting: TDECFormatClass): Boolean;
+                                     CipherTextFormatting: TDECFormatClass): Boolean;
 begin
-  result := false;
+  Result := false;
 
   if ComboBoxPlainTextFormatting.ItemIndex >= 0 then
   begin
@@ -510,21 +712,25 @@ begin
     exit;
   end;
 
-  if EditKey.Text.IsEmpty or EditInitVector.Text.IsEmpty or
-     (EditFiller.Text.IsEmpty and
-      not (GetSelectedCipherMode in GetCipherModesWithoutFiller)) then
+  if EditKey.Text.IsEmpty or
+     (EditInitVector.Text.IsEmpty and
+      EditFiller.Text.IsEmpty) then
   begin
     ShowMessage('No key, initialization vector or filler byte given', TMsgDlgType.mtError);
     exit;
   end;
 
-  result := true;
+  Result := true;
 end;
 
 function TFormMain.GetInitializedCipherInstance: TDECCipherModes;
 var
+  KeyIVFormat: TDECFormatClass;
   FillerByte : UInt8;
 begin
+  // Get data from the user input or where it is missing define some
+
+  // Initialization vector IV fill up byte for too short vectors entered
   if not EditFiller.Text.IsEmpty then
   begin
     while length(EditFiller.Text) < 2 do
@@ -536,14 +742,21 @@ begin
     // we need to assume something to be able to call that init overload
     FillerByte := 0;
 
-  if TFormat_HEXL.IsValid(RawByteString(EditInitVector.Text.ToLower)) and
-     TFormat_HEXL.IsValid(RawByteString(EditKey.Text.ToLower)) then
-  begin
-    Result := GetCipherInstance;
+  // get selected input format for IV
+  KeyIVFormat := TDECFormat.ClassByName(
+                   ComboBoxKeyIVFormat.Items[ComboBoxKeyIVFormat.ItemIndex]);
+  Assert(Assigned(KeyIVFormat), 'Missing format');
 
-    Result.Init(BytesOf(TFormat_HexL.Decode(RawByteString(EditKey.Text.ToLower))),
-                BytesOf(TFormat_HexL.Decode(RawByteString(EditInitVector.Text.ToLower))),
-                FillerByte);
+  // Check entered IV for format/syntax validity
+  if KeyIVFormat.IsValid(RawByteString(EditInitVector.Text)) and
+     KeyIVFormat.IsValid(RawByteString(EditKey.Text)) then
+  begin
+    // Create instance of the cipher algorithm and initialize it using key, IV
+    // and padding mode given by the user
+    Result := GetCipherInstance;
+    Result.Init(RawStringToBytes(KeyIVFormat.Decode(RawByteString(EditKey.Text))),
+                RawStringToBytes(KeyIVFormat.Decode(RawByteString(EditInitVector.Text))),
+                FillerByte, GetSelectedPaddingMode);
   end
   else
     raise Exception.Create('No valid encryption key or init vector given!');
@@ -553,15 +766,27 @@ function TFormMain.GetSelectedCipherMode: TCipherMode;
 var
   ModeStr : string;
 begin
+  // Display value of the selected block concatenation mode
   ModeStr := ComboBoxChainingMethod.Items[ComboBoxChainingMethod.ItemIndex];
 
+  // remove things only present for display purposes
   if ModeStr.Contains('(') then
     ModeStr := ModeStr.Remove(ModeStr.IndexOf('(')-1);
 
   // Determine selected block chaining method via RTTI (runtime type information)
-  result := TCipherMode(System.TypInfo.GetEnumValue(
-              TypeInfo(TCipherMode),
-              ModeStr));
+  Result := TCipherMode(System.TypInfo.GetEnumValue(
+              TypeInfo(TCipherMode), ModeStr));
+end;
+
+function TFormMain.GetSelectedPaddingMode: TPaddingMode;
+var
+  ModeStr : string;
+begin
+  // Display value of the selected padding mode (filling up a last incomplete block)
+  ModeStr := ComboBoxPaddingMode.Items[ComboBoxPaddingMode.ItemIndex];
+  // Determine selected block chaining method via RTTI (runtime type information)
+  Result := TPaddingMode(System.TypInfo.GetEnumValue(TypeInfo(TPaddingMode),
+                                                     ModeStr));
 end;
 
 procedure TFormMain.InitCipherCombo;
@@ -569,6 +794,7 @@ var
   MyClass : TPair<Int64, TDECClass>;
   Ciphers : TStringList;
 begin
+  // List all registered ciphers in the combobox
   Ciphers := TStringList.Create;
 
   try
@@ -592,14 +818,16 @@ end;
 
 procedure TFormMain.InitCipherModes;
 var
-  Mode : TCipherMode;
-  Name : string;
+  CipherMode : TCipherMode;
+  Name       : string;
 begin
-  for Mode := low(TCipherMode) to high(TCipherMode) do
+  // List all available block chaining modes in the combobox
+  ComboBoxChainingMethod.Clear;
+  for CipherMode := low(TCipherMode) to high(TCipherMode) do
   begin
-    Name := System.TypInfo.GetEnumName(TypeInfo(TCipherMode), Integer(Mode));
+    Name := System.TypInfo.GetEnumName(TypeInfo(TCipherMode), Integer(CipherMode));
 
-    if IsAuthenticatedBlockMode(Mode) then
+    if IsAuthenticatedBlockMode(CipherMode) then
       name := name + ' (authenticated)';
 
     ComboBoxChainingMethod.Items.Add(Name);
@@ -607,6 +835,8 @@ begin
 
   if ComboBoxChainingMethod.Items.Count > 0 then
     ComboBoxChainingMethod.ItemIndex := 0;
+
+  InitPaddingModesCombo;
 end;
 
 procedure TFormMain.InitFormatCombos;
@@ -638,6 +868,17 @@ begin
         ComboBoxCipherTextFormatting.ItemIndex := 0;
       end;
     end;
+
+    ComboBoxKeyIVFormat.Items.Clear;
+    ComboBoxKeyIVFormat.Items.Add(TFormat_HEX.ClassName);
+    ComboBoxKeyIVFormat.Items.Add(TFormat_HEXL.ClassName);
+    ComboBoxKeyIVFormat.Items.Add(TFormat_Base32.ClassName);
+    ComboBoxKeyIVFormat.Items.Add(TFormat_Base64.ClassName);
+    ComboBoxKeyIVFormat.ItemIndex := 1;
+
+    FKeyAndIVFormatting           := TFormat_HEXL;
+    EditInitVector.FilterChar     := TFormat_HEXL.FilterChars;
+    EditKey.FilterChar            := TFormat_HEXL.FilterChars;
   finally
     Formats.Free;
   end;
@@ -661,8 +902,8 @@ begin
 
   // Adjust layout
   if Visible then
-    LayoutEncrypt.Position.Y        := LayoutAuthentication.Position.Y +
-                                       LayoutAuthentication.Height
+    LayoutEncrypt.Position.Y := LayoutAuthentication.Position.Y +
+                                LayoutAuthentication.Height
   else
     LayoutEncrypt.Position.Y := LayoutCipherSettings.Position.Y +
                                 LayoutCipherSettings.Height;
@@ -681,20 +922,17 @@ begin
       ComboEditLengthCalculatedValue.Text.ToInteger;
 
     Cipher.DataToAuthenticate :=
-      TFormat_HexL.Decode(BytesOf(RawByteString(EditAuthenticatedData.Text)));
+      TFormat_HexL.Decode(RawStringToBytes(RawByteString(EditAuthenticatedData.Text)));
 
     Cipher.ExpectedAuthenticationResult :=
-      TFormat_HexL.Decode(BytesOf(RawByteString(EditExpectedAuthenthicationResult.Text)));
+      TFormat_HexL.Decode(RawStringToBytes(RawByteString(EditExpectedAuthenthicationResult.Text)));
   end;
 end;
 
 procedure TFormMain.ShowMessage(Msg: string; MessageType: TMsgDlgType);
-{$IF RTLVersion > 30}
 var
   AsyncDlg : IFMXDialogServiceASync;
-{$ENDIF}
 begin
-  {$IF RTLVersion > 30}
   if TPlatformServices.Current.SupportsPlatformService(IFMXDialogServiceAsync,
                                                        IInterface(AsyncDlg)) then
     AsyncDlg.MessageDialogAsync(Translate(Msg),
@@ -702,10 +940,6 @@ begin
     procedure (const AResult: TModalResult)
     begin
     end);
-  {$ELSE}
-  MessageDlg(Translate(Msg),
-             TMsgDlgType.mtError, [TMsgDlgBtn.mbOk], 0);
-  {$ENDIF}
 end;
 
 procedure TFormMain.UpdateAuthenticationStatus;

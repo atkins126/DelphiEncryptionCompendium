@@ -307,6 +307,9 @@ type
     ///   Optional parameter: can be used to specify a different default value
     ///   for the index variable used in the algorithm.
     /// </param>
+    /// <exception cref="EDECHashException">
+    ///   Exception raised if DataSize and SeedSize are both 0
+    /// </exception>
     /// <returns>
     ///   Returns the new derrived key with the length specified in MaskSize.
     /// </returns>
@@ -333,6 +336,9 @@ type
     ///   Optional parameter: can be used to specify a different default value
     ///   for the index variable used in the algorithm.
     /// </param>
+    /// <exception cref="EDECHashException">
+    ///   Exception raised if DataSize and SeedSize are both 0
+    /// </exception>
     /// <returns>
     ///   Returns the new derrived key with the length specified in MaskSize.
     /// </returns>
@@ -935,6 +941,29 @@ type
   /// </summary>
   TDECHashExtendedClass = class of TDECHashExtended;
 
+  /// <summary>
+  /// Returns the passed class type if it is not nil. Otherwise the class type
+  /// of the TFormat_Copy class is being returned.
+  /// </summary>
+  /// <param name="HashClass">
+  ///   Class type of a Hash class to return by ValidAuthenticationHash if
+  ///   passing nil to that one. This parameter should not be nil!
+  /// </param>
+  /// <returns>
+  /// Passed class type or TFormat_Copy class type, depending on FormatClass
+  /// parameter value.
+  /// </returns>
+  function ValidAuthenticationHash(HashClass: TDECHashClass): TDECHashAuthenticationClass;
+  /// <summary>
+  ///   Defines which hash class to return by ValidAuthenticationHash if passing
+  ///   nil to that
+  /// </summary>
+  /// <param name="HashClass">
+  ///   Class type of a Hash class to return by ValidAuthenticationHash if
+  ///   passing nil to that one. This parameter should not be nil!
+  /// </param>
+  procedure SetDefaultAuthenticationHashClass(HashClass: TDECHashClass);
+
 implementation
 
 uses
@@ -954,14 +983,33 @@ resourcestring
   ///   not supported.
   /// </summary>
   sCryptIDNotRegistered = 'No class for crypt ID %s registered';
+  /// <summary>
+  ///   Exception message used when no default class has been defined
+  /// </summary>
+  sAuthHashNoDefault    = 'No default authentication hash class has been registered';
+  /// <summary>
+  ///   Exception message used when KDF is being called and both data and seed
+  ///   are empty
+  /// </summary>
+  sEmptyKDFDataAndSeed  = 'Size of data and sees may not both be zero';
+
+var
+  /// <summary>
+  ///   Hash class returned by ValidAuthenticationHash if nil is passed as
+  ///   parameter to it
+  /// </summary>
+  FDefaultAutheticationHashClass: TDECHashAuthenticationClass = nil;
 
 class function TDECHashAuthentication.IsPasswordHash: Boolean;
 begin
   Result := self.InheritsFrom(TDECPasswordHash);
 end;
 
-class function TDECHashAuthentication.KDFInternal(const Data; DataSize: Integer; const Seed;
-                             SeedSize, MaskSize: Integer; KDFType: TKDFType): TBytes;
+class function TDECHashAuthentication.KDFInternal(const Data;
+                                                  DataSize: Integer;
+                                                  const Seed;
+                                                  SeedSize, MaskSize: Integer;
+                                                  KDFType: TKDFType): TBytes;
 var
   I, n,
   Rounds, DigestBytes : Integer;
@@ -1084,6 +1132,9 @@ begin
   Assert(SeedSize >= 0);
   Assert(DigestSize > 0);
 
+  if (DataSize = 0) and (SeedSize = 0) then
+    raise EDECHashException.CreateRes(@sEmptyKDFDataAndSeed);
+
   SetLength(Result, MaskSize);
   Index := SwapUInt32(Index);
 
@@ -1101,11 +1152,13 @@ begin
 
       Count := SwapUInt32(SeedSize);
       HashInstance.Calc(Count, SizeOf(Count));
-      HashInstance.Calc(Seed, SeedSize);
+      if SeedSize > 0 then
+        HashInstance.Calc(Seed, SeedSize);
 
       Count := SwapUInt32(DataSize);
       HashInstance.Calc(Count, SizeOf(Count));
-      HashInstance.Calc(Data, DataSize);
+      if DataSize > 0 then
+        HashInstance.Calc(Data, DataSize);
 
       HashInstance.Done;
 
@@ -1125,6 +1178,9 @@ class function TDECHashAuthentication.KDFx(const Data, Seed: TBytes;
                                            MaskSize: Integer;
                                            Index: UInt32 = 1): TBytes;
 begin
+  if (not Assigned(Data)) and (not Assigned(Seed)) then
+    raise EDECHashException.CreateRes(@sEmptyKDFDataAndSeed);
+
   if (length(Seed) > 0) then
     Result := KDFx(Data[0], Length(Data), Seed[0], Length(Seed), MaskSize, Index)
   else
@@ -1529,10 +1585,10 @@ end;
 procedure TDECPasswordHash.SetSalt(const Value: TBytes);
 begin
   if (Length(Value) > MaxSaltLength) then
-    raise EDECHashException.CreateFmt(sSaltValueTooLong, [MaxSaltLength]);
+    raise EDECHashException.CreateResFmt(@sSaltValueTooLong, [MaxSaltLength]);
 
   if (Length(Value) < MinSaltLength) then
-    raise EDECHashException.CreateFmt(sSaltValueTooShort, [MinSaltLength]);
+    raise EDECHashException.CreateResFmt(@sSaltValueTooShort, [MinSaltLength]);
 
   FSalt := Value;
 end;
@@ -1654,6 +1710,24 @@ function TDECPasswordHash.IsValidPassword(Password        : TBytes;
                                           Format          : TDECFormatClass): Boolean;
 begin
   Result := false;
+end;
+
+function ValidAuthenticationHash(HashClass: TDECHashClass): TDECHashAuthenticationClass;
+begin
+  if Assigned(HashClass) then
+    Result := TDECHashAuthenticationClass(HashClass)
+  else
+    Result := FDefaultAutheticationHashClass;
+
+  if not Assigned(Result) then
+    raise EDECHashException.CreateRes(@sAuthHashNoDefault);
+end;
+
+procedure SetDefaultAuthenticationHashClass(HashClass: TDECHashClass);
+begin
+  Assert(Assigned(HashClass), 'Do not set a nil default hash class!');
+
+  FDefaultAutheticationHashClass := TDECHashAuthenticationClass(HashClass);
 end;
 
 end.
